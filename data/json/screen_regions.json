@@ -1,0 +1,229 @@
+{
+  "layouts": {
+    "layout_4": {
+      "TL": {
+        "left": 0,
+        "top": 0
+      },
+      "TR": {
+        "left": 1920,
+        "top": 0
+      },
+      "BL": {
+        "left": 0,
+        "top": 1044
+      },
+      "BR": {
+        "left": 1920,
+        "top": 1044
+      }
+    },
+    "layout_6": {
+      "TL": {
+        "left": 0,
+        "top": 0
+      },
+      "TC": {
+        "left": 1280,
+        "top": 0
+      },
+      "TR": {
+        "left": 2560,
+        "top": 0
+      },
+      "BL": {
+        "left": 0,
+        "top": 1044
+      },
+      "BC": {
+        "left": 1280,
+        "top": 1044
+      },
+      "BR": {
+        "left": 2560,
+        "top": 1044
+      }
+    },
+    "layout_8": {
+      "TL": {
+        "left": 0,
+        "top": 0
+      },
+      "TCL": {
+        "left": 960,
+        "top": 0
+      },
+      "TCR": {
+        "left": 1920,
+        "top": 0
+      },
+      "TR": {
+        "left": 2880,
+        "top": 0
+      },
+      "BL": {
+        "left": 0,
+        "top": 1044
+      },
+      "BCL": {
+        "left": 960,
+        "top": 1044
+      },
+      "BCR": {
+        "left": 1920,
+        "top": 1044
+      },
+      "BR": {
+        "left": 2880,
+        "top": 1044
+      }
+    }
+  },
+  "region_colors": {
+    "score_region_small": [
+      0,
+      255,
+      0
+    ],
+    "score_region_medium": [
+      0,
+      255,
+      255
+    ],
+    "score_region_large": [
+      0,
+      128,
+      255
+    ],
+    "my_money_region": [
+      255,
+      0,
+      0
+    ],
+    "other_count_region": [
+      255,
+      0,
+      255
+    ],
+    "other_money_region": [
+      255,
+      255,
+      0
+    ],
+    "phase_region": [
+      128,
+      0,
+      128
+    ],
+    "play_amount_coords_1": [
+      0,
+      0,
+      255
+    ],
+    "play_button_coords_1": [
+      255,
+      128,
+      0
+    ],
+    "auto_play_coords_1": [
+      128,
+      255,
+      0
+    ],
+    "play_amount_coords_2": [
+      0,
+      128,
+      128
+    ],
+    "play_button_coords_2": [
+      128,
+      128,
+      255
+    ],
+    "auto_play_coords_2": [
+      255,
+      255,
+      128
+    ]
+  },
+  "regions": {
+    "score_region_small": {
+      "left": 448,
+      "top": 399,
+      "width": 380,
+      "height": 130
+    },
+    "score_region_medium": {
+      "left": 408,
+      "top": 399,
+      "width": 460,
+      "height": 130
+    },
+    "score_region_large": {
+      "left": 248,
+      "top": 399,
+      "width": 780,
+      "height": 130
+    },
+    "my_money_region": {
+      "left": 885,
+      "top": 135,
+      "width": 270,
+      "height": 60
+    },
+    "other_count_region": {
+      "left": 195,
+      "top": 970,
+      "width": 290,
+      "height": 60
+    },
+    "other_money_region": {
+      "left": 770,
+      "top": 970,
+      "width": 330,
+      "height": 60
+    },
+    "phase_region": {
+      "left": 458,
+      "top": 404,
+      "width": 360,
+      "height": 120
+    },
+    "play_amount_coords_1": {
+      "left": 13,
+      "top": 724,
+      "width": 285,
+      "height": 45
+    },
+    "play_button_coords_1": {
+      "left": 328,
+      "top": 735,
+      "width": 290,
+      "height": 130
+    },
+    "auto_play_coords_1": {
+      "left": 355,
+      "top": 899,
+      "width": 130,
+      "height": 40
+    },
+    "play_amount_coords_2": {
+      "left": 655,
+      "top": 724,
+      "width": 285,
+      "height": 45
+    },
+    "play_button_coords_2": {
+      "left": 969,
+      "top": 735,
+      "width": 290,
+      "height": 130
+    },
+    "auto_play_coords_2": {
+      "left": 995,
+      "top": 899,
+      "width": 130,
+      "height": 40
+    }
+  }
+}

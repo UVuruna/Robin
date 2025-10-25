@@ -1,0 +1,192 @@
+{
+  "metadata": {
+    "version": "1.0.0",
+    "last_updated": "2025-10-20",
+    "description": "Bookmaker configuration including server groups, bet limits, and Stylus CSS customizations"
+  },
+  "server_groups": [
+    {
+      "group_id": 1,
+      "name": "Mozzart_Server_Group",
+      "bookmakers": ["Mozzart", "MaxBet", "Merkur", "BetOle"],
+      "note": "Same Aviator game instance - do not track simultaneously"
+    },
+    {
+      "group_id": 2,
+      "name": "Admiral_Server_Group",
+      "bookmakers": ["Admiral", "Meridian", "VolcanoBet"],
+      "note": "Same Aviator game instance - do not track simultaneously"
+    },
+    {
+      "group_id": 3,
+      "name": "Soccer_Server_Group",
+      "bookmakers": ["Soccer", "Bet365"],
+      "note": "Same Aviator game instance - do not track simultaneously"
+    },
+    {
+      "group_id": 4,
+      "name": "StarBet_Server_Group",
+      "bookmakers": ["StarBet", "SuperBet", "Rizk", "IviBet", "Vavada", "Strada", "FreshCasino", "SolCasino"],
+      "note": "Same Aviator game instance - do not track simultaneously"
+    },
+    {
+      "group_id": 5,
+      "name": "BalkanBet_Server_Group",
+      "bookmakers": ["BalkanBet"],
+      "note": "Independent server"
+    },
+    {
+      "group_id": 6,
+      "name": "King_Server_Group",
+      "bookmakers": ["King"],
+      "note": "Independent server"
+    },
+    {
+      "group_id": 7,
+      "name": "Megapari_Server_Group",
+      "bookmakers": ["Megapari", "22Bet", "SpinBetter", "888Starz", "BetLabel"],
+      "note": "Same Aviator game instance - do not track simultaneously"
+    },
+    {
+      "group_id": 8,
+      "name": "GranaWin_Server_Group",
+      "bookmakers": ["GranaWin"],
+      "note": "Independent server"
+    },
+    {
+      "group_id": 9,
+      "name": "20Bet_Server_Group",
+      "bookmakers": ["20Bet"],
+      "note": "Independent server"
+    }
+  ],
+  "bet_limits": {
+    "Mozzart": {
+      "limit_rsd": 100000,
+      "formatted": "100,000 RSD",
+      "tier": "premium"
+    },
+    "Meridian": {
+      "limit_rsd": 24000,
+      "formatted": "24,000 RSD",
+      "tier": "medium"
+    },
+    "BalkanBet": {
+      "limit_rsd": 12000,
+      "formatted": "12,000 RSD",
+      "tier": "standard"
+    },
+    "Soccer": {
+      "limit_rsd": 11000,
+      "formatted": "11,000 RSD",
+      "tier": "standard"
+    },
+    "Admiral": {
+      "limit_rsd": 11000,
+      "formatted": "11,000 RSD",
+      "tier": "standard"
+    },
+    "MaxBet": {
+      "limit_rsd": 11000,
+      "formatted": "11,000 RSD",
+      "tier": "standard"
+    },
+    "Merkur": {
+      "limit_rsd": 11000,
+      "formatted": "11,000 RSD",
+      "tier": "standard"
+    },
+    "King": {
+      "limit_rsd": 11000,
+      "formatted": "11,000 RSD",
+      "tier": "standard"
+    },
+    "Bet365": {
+      "limit_rsd": 11000,
+      "formatted": "11,000 RSD",
+      "tier": "standard"
+    },
+    "BetOle": {
+      "limit_rsd": 11000,
+      "formatted": "11,000 RSD",
+      "tier": "standard"
+    },
+    "StarBet": {
+      "limit_rsd": 11000,
+      "formatted": "11,000 RSD",
+      "tier": "standard"
+    },
+    "Rizk": {
+      "limit_rsd": 11000,
+      "formatted": "11,000 RSD",
+      "tier": "standard"
+    },
+    "VolcanoBet": {
+      "limit_rsd": 5000,
+      "formatted": "5,000 RSD",
+      "tier": "low"
+    },
+    "1XBet": {
+      "limit_rsd": 11000,
+      "formatted": "11,000 RSD",
+      "tier": "standard"
+    }
+  },
+  "stylus_configurations": {
+    "Mozzart": {
+      "status": "Done",
+      "url_pattern": "https://www.mozzartbet.com/*",
+      "css": ".navigatio-wrapper {display: none}\n.game-header {display: none !important;}\n.casino-game-fullscreen {height: 100% !important; width: 100% !important; padding: 0 !important}\n.game-holder {height: 100%}"
+    },
+    "BalkanBet": {
+      "status": "Done",
+      "url_pattern": "https://www.balkanbet.rs/*",
+      "css": ".n-header {position: fixed; width: 100%; top: 0; height: 0; z-index: -1}\n.n-content.fixed .content-frame {position: absolute; top: 0; bottom: 0; max-width: none; z-index: 100}\n.game__container {max-width: unset; padding: 0}\nbutton.btn.btn-secondary.btn-sm.bet-opt.ng-star-inserted {display: none}"
+    },
+    "Soccer": {
+      "status": "Done",
+      "url_pattern": "https://www.soccerbet.rs/*",
+      "css": ".widget_carousel {display: none}\n.DESK-nav-top {display: none}\n.lobby-game--header {height: 0}\n.DESK-content {height: 100vh}\n.DESK-nav-footer {display: none; top: 0; bottom: 0}\n.widget_carousel.pointer-events-none.ng-tns-c1403638028-0.initial.promotion.top_left.collapsed.ng-star-inserted {display: none}\nion-content.ios.hydrated {top: 0}\nds-lobby-game .lobby-game--header {height: 0px; z-index: -1}"
+    },
+    "Admiral": {
+      "status": "Done",
+      "url_pattern": "https://www.admiralbet.rs/*",
+      "css": ".sticky-top {display: none}\n#sidebar-left {display: none}\nsection.content {margin: 0}\n#footer {display: none}\n#spribeIframe {min-height: 100vh !important}"
+    },
+    "MaxBet": {
+      "status": "Done",
+      "url_pattern": "https://www.maxbet.rs/*",
+      "css": ".DESK-content--right {display: none}\n.DESK-content--left {display: none}\n.DESK-nav-top {display: none}\n.DESK-nav-footer {display: none}\n.DESK--app, .DESK-content, .DESK.content--inner {height: 100vh !important}\n.DESK-content--center {margin-top: 0 !important}\nds-lobby-game-wrapper.ion-content--scroll {overflow-x: visible !important}\nion-row.DESK-content--inner.ios.hydrated {height: 100%}\nion-toolbar.navbar-header.toolbar-title-default.ion-color.ion-color-primary.ios.in-toolbar.hydrated {display: none}"
+    },
+    "Merkur": {
+      "status": "Done",
+      "url_pattern": "https://www.merkur-win.com/*",
+      "css": ".DESK-content-casino--right {display: none}\n.DESK-nav-top {display: none}\n.casino-game--jackpot-nav-wrapper {display: none}\n.DESK-content-casino--right {width: 100vw !important; height: 100vh !important}\n#seven-plugin, .lobby-game-display--games-display {margin: 0; height: 100vh}\n#webchat-root {display: none}"
+    },
+    "King": {
+      "status": "Done",
+      "url_pattern": "https://www.kingbet.rs/*",
+      "css": "div#js_gv_main {margin: 0 !important; padding: 0 !important; width: 100% !important; height: 100% !important; z-index: 1000}\ndiv#js_game_view_cont {width: 100%}\n.lca-gv-container-item.one-item.js_game_view_item {top: 0; position: absolute; bottom: 0; height: 100vh !important; width: 100vw !important; padding: 0}\ndiv#js_game_view_inner_cont {padding-top: 100vh}"
+    },
+    "Meridian": {
+      "status": "Done",
+      "url_pattern": "https://www.meridianbet.rs/*",
+      "css": ".c-casino-game__header {display: none !important}\n.c-casino-game {padding: 0}\n.c-casino-game-main {padding: 0 !important}\n.c-casino-game.c-casino-game--real-mode.ng-star-inserted {padding: 0}\n.l-main-content.l-main-content--header-hidden {width: 100vw}\n.c-customer-support-button.ng-tns-c1241533063-0.ng-star-inserted {display: none}"
+    },
+    "Bet365": {
+      "status": "Done",
+      "url_pattern": "https://www.bet365.com/*",
+      "css": "header.header.header--product-nav-visible {display: none}\n.inline-games-page-component__game-header {display: none}\n.inline-games-page-component__content-container {height: 100vh; padding: 0}\n.inline-games-page-component__iframe-container {\n    max-width: unset !important;\n    max-height: unset !Important;\n    width: 100vw !important;\n    height: 100vh !important;\n}"
+    },
+    "StarBet": {
+      "status": "Done",
+      "url_pattern": "https://www.starbet.rs/*",
+      "css": ".iframe-back {display: none !important}\ndiv#divProdukti {padding-top: 0 !important; z-index: 1000}"
+    },
+    "Rizk": {
+      "status": "Done",
+      "url_pattern": "https://www.rizk.com/*",
+      "css": "iframe#game-iframe {\n    height: 100vh !important;\n    width: 100vw !important;\n    z-index: 1000;\n}\ndiv#game-view {padding: 0 !important; height: 100vh !important}\ndiv#game-iframe-container {padding: 0 !important}\n.gameview-wrapper {height: 100vh !important}\nheader#topBar {display: none !important}\ndiv#wrap-btn-bar {display: none}"
+    }
+  }
+}
