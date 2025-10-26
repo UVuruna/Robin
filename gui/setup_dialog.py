@@ -18,9 +18,7 @@ from PySide6.QtWidgets import (
     QDoubleSpinBox,
 )
 from typing import Dict
-
 from core.coord_manager import CoordsManager
-
 
 class SetupDialog(QDialog):
     """

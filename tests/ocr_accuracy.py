@@ -16,7 +16,6 @@ from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QFont
 import time
 
-
 class OCRTestWorker(QThread):
     progress = Signal(int)
     log = Signal(str)

@@ -3,7 +3,6 @@
 
 import sys
 from pathlib import Path
-
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from PySide6.QtWidgets import (
@@ -25,7 +24,6 @@ import cv2
 import mss
 import json
 import traceback
-
 
 class RegionEditorDialog(QDialog):
     """Region Editor - saves RELATIVE coordinates."""

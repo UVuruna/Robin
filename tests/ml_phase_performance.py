@@ -19,7 +19,6 @@ import numpy as np
 import pickle
 from typing import Dict
 
-
 class MLPhaseSpeedWorker(QThread):
     progress = Signal(int)
     log = Signal(str)
@@ -39,7 +38,7 @@ class MLPhaseSpeedWorker(QThread):
         try:
             from core.coord_manager import CoordsManager
             from core.screen_reader import ScreenReader
-            from config.config import PATH, GamePhase, BetState
+            from config import PATH, GamePhase, BetState
 
             mode_str = f"{self.value}s" if self.mode == "time" else f"{self.value} iterations"
             self.log.emit(f"Initializing benchmark ({mode_str})...")

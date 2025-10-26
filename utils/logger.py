@@ -1,4 +1,4 @@
-# logger.py
+# utils/logger.py
 # VERSION: 5.0 - Fixed for new config system
 # Centralized logging system
 
@@ -7,7 +7,6 @@ import sys
 from pathlib import Path
 from logging.handlers import RotatingFileHandler
 from typing import Optional
-
 
 class AviatorLogger:
     """
@@ -66,7 +65,7 @@ def init_logging(
 
     # Import config here to avoid circular imports
     try:
-        from config.config import PATH, LOGGING
+        from config import PATH, LOGGING
 
         log_dir = PATH.logs_dir
         log_format = LOGGING.format
@@ -163,7 +162,7 @@ def get_module_logger(
         for h in logger.handlers
     ):
         try:
-            from config.config import PATH, LOGGING
+            from config import PATH, LOGGING
 
             log_dir = PATH.logs_dir
             max_bytes = LOGGING.max_bytes

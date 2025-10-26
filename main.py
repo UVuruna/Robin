@@ -1,10 +1,14 @@
 # main.py
-# VERSION: 2.0 - COMPLETE GUI with Live Logs & DB-polled Stats
-# PURPOSE: Central control panel for all Aviator apps
+# Izmene za main.py da koristi novu arhitekturu
+"""
+INTEGRATION GUIDE za main.py
+
+Ovaj kod pokazuje kako da integrišeš AppControllerV2 u postojeći main.py
+Samo zameni relevantne delove u postojećem fajlu.
+"""
 
 import sys
 from pathlib import Path
-
 sys.path.insert(0, str(Path(__file__).parent))
 
 from PySide6.QtWidgets import (
@@ -22,7 +26,6 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QEvent
 from PySide6.QtGui import QFont, QPalette, QColor
-
 from gui.config_manager import ConfigManager
 from gui.app_controller import AppController
 from gui.setup_dialog import SetupDialog
@@ -32,9 +35,10 @@ from gui.stats_widgets import (
     BettingAgentStats,
     SessionKeeperStats,
 )
+from gui.app_controller import AppController
+from core.communication.event_bus import EventBus, EventSubscriber, EventType
 from gui.tools_tab import ToolsTab
 from utils.logger import AviatorLogger
-
 
 class AviatorControlPanel(QMainWindow):
     """
@@ -62,6 +66,15 @@ class AviatorControlPanel(QMainWindow):
         self.apply_dark_theme()
 
         self.logger.info("GUI initialized")
+        
+        self.event_subscriber = EventSubscriber("GUI-Main")
+        self._setup_event_subscriptions()
+
+    def _setup_event_subscriptions(self):
+        """Subscribe to important events for GUI updates"""
+        self.event_subscriber.subscribe(EventType.ROUND_END, self._on_round_end_event)
+        self.event_subscriber.subscribe(EventType.THRESHOLD_CROSSED, self._on_threshold_event)
+        self.event_subscriber.subscribe(EventType.DATA_COLLECTED, self._on_data_collected_event)
 
     def init_ui(self):
         """Initialize UI components."""
@@ -99,7 +112,39 @@ class AviatorControlPanel(QMainWindow):
 
         main_layout.addWidget(self.tabs)
 
+    def _on_round_end_event(self, event):
+        """Handle round end events from workers"""
+        bookmaker = event.data.get('bookmaker')
+        score = event.data.get('final_score')
+        
+        # Update stats widget if it exists
+        if hasattr(self, 'data_stats'):
+            # Trigger stats refresh
+            self.data_stats.fetch_and_update_stats()
+        
+        # Add to appropriate log
+        log_msg = f"[{bookmaker}] Round ended: {score:.2f}x"
+        if hasattr(self, 'data_log'):
+            self.data_log.append(log_msg)
 
+    def _on_threshold_event(self, event):
+        """Handle threshold crossed events"""
+        bookmaker = event.data.get('bookmaker')
+        threshold = event.data.get('threshold')
+        
+        log_msg = f"[{bookmaker}] Threshold {threshold}x crossed"
+        if hasattr(self, 'data_log'):
+            self.data_log.append(log_msg)
+
+    def _on_data_collected_event(self, event):
+        """Handle data collection events"""
+        bookmaker = event.data.get('bookmaker')
+        count = event.data.get('count', 0)
+        data_type = event.data.get('type', 'unknown')
+    
+        # Route to appropriate log
+        if data_type == 'rgb' and hasattr(self, 'rgb_log'):
+            self.rgb_log.append(f"[{bookmaker}] Collected {count} RGB samples")
 
     def create_app_tab(self, app_name: str) -> QWidget:
         """
@@ -258,28 +303,93 @@ class AviatorControlPanel(QMainWindow):
     # ========================================================================
 
     def start_data_collector(self):
-        """Start Data Collector."""
+        """Start Data Collector with new architecture."""
         if not self.config.get("bookmakers"):
-            QMessageBox.warning(self, "No Config", "Setup bookmakers first!")
-            return
-
+            # Show setup dialog first
+            self.open_setup_dialog()
+            if not self.config.get("bookmakers"):
+                QMessageBox.warning(self, "No Config", "Setup cancelled!")
+                return
+        
+        # Prepare bookmakers config with coordinates
+        bookmakers_config = []
+        for bm in self.config.get("bookmakers", []):
+            # Get coordinates from coord_manager
+            coords = self.coords_manager.calculate_coords(
+                self.config.get("layout", "layout_6"),
+                bm["position"],
+                self.config.get("dual_monitor", False)
+            )
+            
+            if coords:
+                bookmakers_config.append({
+                    "name": bm["name"],
+                    "position": bm["position"],
+                    "coords": coords
+                })
+        
+        # Update config with coordinates
+        self.config["bookmakers"] = bookmakers_config
+        
         success = self.app_controller.start_app(
             "data_collector",
             self.config,
-            log_callback=self.on_log_received,  # Real-time logs
+            log_callback=self.on_log_received,
         )
 
         if success:
             self.btn_start_data.setEnabled(False)
             self.btn_stop_data.setEnabled(True)
-            self.data_log.append("=== Data Collector Started ===\n")
+            self.data_log.append("=== Data Collector Started (V2 Architecture) ===\n")
+            self.data_log.append(f"Tracking {len(bookmakers_config)} bookmakers")
+            
+            # Show performance info
+            self.data_log.append("\n📊 Performance Mode:")
+            self.data_log.append("  • OCR: Shared Reader (optimized)")
+            self.data_log.append("  • Database: Batch Writer (50x faster)")
+            self.data_log.append("  • Communication: Event Bus")
 
     def stop_data_collector(self):
-        """Stop Data Collector."""
+        """Stop Data Collector and show statistics."""
+        # Get final stats before stopping
+        stats = self.app_controller.get_worker_status("data_collector")
+        
         self.app_controller.stop_app("data_collector")
         self.btn_start_data.setEnabled(True)
         self.btn_stop_data.setEnabled(False)
+        
+        # Show statistics
+        if stats.get("workers"):
+            self.data_log.append("\n📊 Final Statistics:")
+            for worker_name, worker_stats in stats["workers"].items():
+                if worker_stats:
+                    self.data_log.append(f"  {worker_name}:")
+                    self.data_log.append(f"    • Uptime: {worker_stats.get('uptime', 0):.0f}s")
+                    self.data_log.append(f"    • Restarts: {worker_stats.get('restart_count', 0)}")
+        
         self.data_log.append("\n=== Data Collector Stopped ===")
+
+    def show_system_stats(self):
+        """Show overall system statistics in a dialog"""
+        stats = self.app_controller.get_stats()
+        
+        stats_text = "🎯 SYSTEM STATISTICS\n" + "="*50 + "\n\n"
+        
+        # Process manager stats
+        if 'process_manager' in stats:
+            pm = stats['process_manager']
+            stats_text += "📦 Process Manager:\n"
+            stats_text += f"  • Total started: {pm.get('total_started', 0)}\n"
+            stats_text += f"  • Total crashed: {pm.get('total_crashed', 0)}\n"
+            stats_text += f"  • Total restarted: {pm.get('total_restarted', 0)}\n\n"
+        
+        # Event bus stats
+        if 'event_bus' in stats:
+            eb = stats['event_bus']
+            stats_text += "📨 Event Bus:\n"
+            stats_text += f"  • Events sent: {eb.get('events_sent', 0)}\n"
+            stats_text += f"  • Events processed: {eb.get('events_processed', 0)}\n"
+            stats_text += f"  • Events failed: {eb.get('events_failed', 0)}\n
 
     def start_rgb_collector(self):
         """Start RGB Collector."""

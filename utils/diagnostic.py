@@ -3,7 +3,6 @@
 
 import sys
 from pathlib import Path
-
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from PySide6.QtWidgets import (
@@ -18,9 +17,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QFont
-
-from config.config import PATH
-
+from config import PATH
 
 class DiagnosticWorker(QThread):
     """Worker thread for system diagnostics."""

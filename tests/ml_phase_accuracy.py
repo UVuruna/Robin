@@ -18,7 +18,6 @@ import time
 import numpy as np
 import pickle
 
-
 class MLPhaseTestWorker(QThread):
     progress = Signal(int)
     log = Signal(str)
@@ -38,7 +37,7 @@ class MLPhaseTestWorker(QThread):
         try:
             from core.coord_manager import CoordsManager
             from core.screen_reader import ScreenReader
-            from config.config import PATH, GamePhase, BetState
+            from config import PATH, GamePhase, BetState
 
             self.log.emit("Initializing ML phase test...")
             self.log.emit(f"Iterations: {self.iterations}")

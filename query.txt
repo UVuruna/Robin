@@ -1,0 +1,10 @@
+├── collectors/                 # Kolektori podataka
+│   ├── base_collector.py     # Bazna klasa
+│   ├── main_collector.py     # Glavni kolektor
+│   ├── rgb_collector.py      # RGB kolektor
+│   └── phase_collector.py    # Game phase kolektor
+│
+├── agents/                     # Agenti
+│   ├── betting_agent.py      # Betting agent
+│   ├── session_keeper.py     # Session keeper
+│   └── strategy_executor.py  # Strategy executor

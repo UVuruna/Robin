@@ -15,7 +15,6 @@ from PySide6.QtGui import QFont
 import time
 from typing import Dict
 
-
 class SpeedBenchmarkWorker(QThread):
     progress = Signal(int)
     log = Signal(str)

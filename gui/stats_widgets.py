@@ -9,10 +9,8 @@ from PySide6.QtCore import QTimer
 import sqlite3
 from datetime import datetime
 from typing import Dict, Optional
-
-from config.config import PATH
+from config import PATH
 from utils.logger import AviatorLogger
-
 
 class DataCollectorStats(QWidget):
     """Stats for Main Data Collector - with performance metrics."""

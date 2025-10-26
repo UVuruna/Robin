@@ -8,7 +8,6 @@
 
 import sys
 from pathlib import Path
-
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from PySide6.QtWidgets import (
@@ -30,9 +29,7 @@ import cv2
 import mss
 from datetime import datetime
 import json
-
 from core.coord_manager import CoordsManager
-
 
 class RegionVisualizerDialog(QDialog):
     """Region Visualizer v9.0 - colors from JSON, fixed middle button."""

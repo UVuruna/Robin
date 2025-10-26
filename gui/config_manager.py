@@ -3,11 +3,9 @@
 # PURPOSE: Manage config.json for GUI
 
 import json
-from config.config import PATH
+from config import PATH
 from typing import Dict, Any
-
 from utils.logger import AviatorLogger
-
 
 class ConfigManager:
     """
