@@ -10,7 +10,7 @@ from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
 import logging
 
-from core.ocr.screen_reader import ScreenReader
+from core.capture.screen_capture import ScreenCapture
 from config import GamePhase
 
 
@@ -182,11 +182,11 @@ class SharedGameStateReader:
             
             # Create readers for different regions
             self.readers[bookmaker] = {
-                'score_small': ScreenReader(coords.get('score_region_small')),
-                'score_medium': ScreenReader(coords.get('score_region_medium')),
-                'score_large': ScreenReader(coords.get('score_region_large')),
-                'other_count': ScreenReader(coords.get('other_count_region')),
-                'other_money': ScreenReader(coords.get('other_money_region')),
+                'score_small': ScreenCapture(coords.get('score_region_small')),
+                'score_medium': ScreenCapture(coords.get('score_region_medium')),
+                'score_large': ScreenCapture(coords.get('score_region_large')),
+                'other_count': ScreenCapture(coords.get('other_count_region')),
+                'other_money': ScreenCapture(coords.get('other_money_region')),
             }
     
     def _cleanup_readers(self):

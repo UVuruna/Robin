@@ -35,8 +35,7 @@ from gui.stats_widgets import (
     BettingAgentStats,
     SessionKeeperStats,
 )
-from gui.app_controller import AppController
-from core.communication.event_bus import EventBus, EventSubscriber, EventType
+from core.communication.event_bus import EventSubscriber, EventType
 from gui.tools_tab import ToolsTab
 from utils.logger import AviatorLogger
 
@@ -389,7 +388,7 @@ class AviatorControlPanel(QMainWindow):
             stats_text += "📨 Event Bus:\n"
             stats_text += f"  • Events sent: {eb.get('events_sent', 0)}\n"
             stats_text += f"  • Events processed: {eb.get('events_processed', 0)}\n"
-            stats_text += f"  • Events failed: {eb.get('events_failed', 0)}\n
+            stats_text += f"  • Events failed: {eb.get('events_failed', 0)}\n\n"
 
     def start_rgb_collector(self):
         """Start RGB Collector."""

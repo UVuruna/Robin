@@ -1,0 +1,370 @@
+# agents/betting_agent.py
+# VERSION: 2.0 - REFAKTORISAN
+# PURPOSE: Automatizovan betting agent sa novom arhitekturom
+
+import time
+import logging
+from typing import Dict, Optional, List
+from dataclasses import dataclass
+from enum import IntEnum
+
+from orchestration.shared_reader import get_shared_reader, GameState
+from core.input.transaction_controller import TransactionController, Priority
+from core.communication.event_bus import EventPublisher, EventSubscriber, EventType
+from data_layer.database.batch_writer import BatchDatabaseWriter
+from config import GamePhase, BettingConfig
+from strategies.base_strategy import BaseStrategy
+
+class BetStatus(IntEnum):
+    """Status of current bet."""
+    NO_BET = 0
+    BET_PLACED = 1
+    BET_WON = 2
+    BET_LOST = 3
+    BET_CASHED = 4
+
+@dataclass
+class BetInfo:
+    """Information about current bet."""
+    amount: float
+    auto_stop: float
+    entry_score: float
+    exit_score: float = 0.0
+    profit: float = 0.0
+    status: BetStatus = BetStatus.NO_BET
+    placed_at: float = 0.0
+    ended_at: float = 0.0
+
+class BettingAgent:
+    """
+    Refaktorisan betting agent koji koristi novu arhitekturu.
+    
+    Features:
+    - Koristi Shared Reader za game state
+    - Transaction Controller za atomske bet operacije
+    - Event Bus za komunikaciju
+    - Batch Writer za database
+    - Strategy pattern za betting logiku
+    """
+    
+    def __init__(self, bookmaker: str, strategy: BaseStrategy, 
+                 coords: Dict, config: BettingConfig):
+        self.bookmaker = bookmaker
+        self.strategy = strategy
+        self.coords = coords
+        self.config = config
+        self.logger = logging.getLogger(f"BettingAgent-{bookmaker}")
+        
+        # Components
+        self.shared_reader = get_shared_reader()
+        self.tx_controller = TransactionController()
+        self.event_publisher = EventPublisher(f"BettingAgent-{bookmaker}")
+        self.event_subscriber = EventSubscriber(f"BettingAgent-{bookmaker}")
+        self.db_writer = BatchDatabaseWriter(
+            db_path="data/databases/betting_history.db",
+            table_name="bets",
+            batch_size=10
+        )
+        
+        # State tracking
+        self.current_bet: Optional[BetInfo] = None
+        self.previous_phase = GamePhase.ENDED
+        self.balance_start = 0.0
+        self.balance_current = 0.0
+        self.total_bets = 0
+        self.total_wins = 0
+        self.total_losses = 0
+        self.total_profit = 0.0
+        
+        # Control
+        self.running = False
+        self.paused = False
+        
+        # Subscribe to events
+        self._setup_event_subscriptions()
+        
+        self.logger.info(f"Initialized with strategy: {strategy.__class__.__name__}")
+    
+    def _setup_event_subscriptions(self):
+        """Setup event subscriptions."""
+        # Listen for manual stop signals
+        self.event_subscriber.subscribe(
+            EventType.WORKER_STOPPED,
+            self._on_stop_signal
+        )
+    
+    def _on_stop_signal(self, event):
+        """Handle stop signal."""
+        if event.data.get('bookmaker') == self.bookmaker:
+            self.logger.info("Received stop signal")
+            self.stop()
+    
+    def run(self):
+        """Main betting loop."""
+        self.logger.info("Starting betting agent")
+        self.running = True
+        
+        # Get initial balance
+        state = self.shared_reader.get_state(self.bookmaker)
+        if state:
+            self.balance_start = state.my_money
+            self.balance_current = state.my_money
+        
+        while self.running:
+            try:
+                if self.paused:
+                    time.sleep(0.1)
+                    continue
+                
+                # Get current game state
+                state = self.shared_reader.get_state(self.bookmaker)
+                if not state or not state.is_valid:
+                    time.sleep(0.1)
+                    continue
+                
+                # Update balance
+                self.balance_current = state.my_money
+                
+                # Process based on phase
+                self._process_phase(state)
+                
+                # Track phase changes
+                if state.phase != self.previous_phase:
+                    self.event_publisher.phase_change(
+                        self.bookmaker,
+                        self.previous_phase,
+                        state.phase
+                    )
+                    self.previous_phase = state.phase
+                
+                # Small delay
+                time.sleep(0.1)
+                
+            except KeyboardInterrupt:
+                break
+            except Exception as e:
+                self.logger.error(f"Error in main loop: {e}")
+                self.event_publisher.worker_error(
+                    str(e),
+                    {'bookmaker': self.bookmaker}
+                )
+                time.sleep(1)
+        
+        self.logger.info("Betting agent stopped")
+    
+    def _process_phase(self, state: GameState):
+        """Process game state based on phase."""
+        
+        # BETTING phase - Place bet if strategy says so
+        if state.phase == GamePhase.BETTING:
+            if not self.current_bet:
+                decision = self.strategy.should_bet(
+                    balance=self.balance_current,
+                    history=self._get_recent_history()
+                )
+                
+                if decision['place_bet']:
+                    self._place_bet(
+                        amount=decision['amount'],
+                        auto_stop=decision['auto_stop']
+                    )
+        
+        # SCORE phases - Monitor and potentially cash out
+        elif state.phase in [GamePhase.SCORE_LOW, GamePhase.SCORE_MID, GamePhase.SCORE_HIGH]:
+            if self.current_bet and self.current_bet.status == BetStatus.BET_PLACED:
+                # Check if should cash out
+                if self.strategy.should_cash_out(
+                    current_score=state.score,
+                    bet_info=self.current_bet
+                ):
+                    self._cash_out(state.score)
+        
+        # ENDED phase - Record result
+        elif state.phase == GamePhase.ENDED:
+            if self.current_bet and self.current_bet.status == BetStatus.BET_PLACED:
+                self._record_loss(state.score)
+    
+    def _place_bet(self, amount: float, auto_stop: float):
+        """Place a bet."""
+        try:
+            # Validate amount
+            amount = max(self.config.min_bet_amount, 
+                        min(amount, self.config.max_bet_amount))
+            
+            # Validate auto-stop
+            auto_stop = max(self.config.min_auto_stop,
+                           min(auto_stop, self.config.max_auto_stop))
+            
+            # Execute transaction
+            success = self.tx_controller.place_bet(
+                bookmaker=self.bookmaker,
+                amount=amount,
+                auto_stop=auto_stop,
+                coords=self.coords,
+                priority=Priority.HIGH
+            )
+            
+            if success:
+                # Create bet info
+                self.current_bet = BetInfo(
+                    amount=amount,
+                    auto_stop=auto_stop,
+                    entry_score=1.0,
+                    placed_at=time.time(),
+                    status=BetStatus.BET_PLACED
+                )
+                
+                self.total_bets += 1
+                
+                # Publish event
+                self.event_publisher.bet_placed(
+                    self.bookmaker, amount, auto_stop
+                )
+                
+                self.logger.info(f"Bet placed: {amount} @ {auto_stop}x")
+            else:
+                self.logger.error("Failed to place bet")
+                
+        except Exception as e:
+            self.logger.error(f"Error placing bet: {e}")
+    
+    def _cash_out(self, current_score: float):
+        """Cash out current bet."""
+        try:
+            success = self.tx_controller.cash_out(
+                bookmaker=self.bookmaker,
+                coords=self.coords,
+                priority=Priority.CRITICAL
+            )
+            
+            if success and self.current_bet:
+                self.current_bet.exit_score = current_score
+                self.current_bet.profit = self.current_bet.amount * (current_score - 1)
+                self.current_bet.status = BetStatus.BET_CASHED
+                self.current_bet.ended_at = time.time()
+                
+                self.total_wins += 1
+                self.total_profit += self.current_bet.profit
+                
+                # Save to database
+                self._save_bet_to_db()
+                
+                # Publish event
+                self.event_publisher.publish(
+                    EventType.BET_CASHED,
+                    {
+                        'bookmaker': self.bookmaker,
+                        'score': current_score,
+                        'profit': self.current_bet.profit
+                    }
+                )
+                
+                self.logger.info(f"Cashed out at {current_score}x, profit: {self.current_bet.profit:.2f}")
+                
+                # Clear current bet
+                self.current_bet = None
+                
+        except Exception as e:
+            self.logger.error(f"Error cashing out: {e}")
+    
+    def _record_loss(self, final_score: float):
+        """Record lost bet."""
+        if not self.current_bet:
+            return
+        
+        self.current_bet.exit_score = final_score
+        self.current_bet.profit = -self.current_bet.amount
+        self.current_bet.status = BetStatus.BET_LOST
+        self.current_bet.ended_at = time.time()
+        
+        self.total_losses += 1
+        self.total_profit -= self.current_bet.amount
+        
+        # Save to database
+        self._save_bet_to_db()
+        
+        # Publish event
+        self.event_publisher.publish(
+            EventType.BET_LOST,
+            {
+                'bookmaker': self.bookmaker,
+                'score': final_score,
+                'loss': self.current_bet.amount
+            }
+        )
+        
+        self.logger.info(f"Bet lost at {final_score}x, loss: {self.current_bet.amount:.2f}")
+        
+        # Update strategy with loss
+        self.strategy.on_loss(self.current_bet)
+        
+        # Clear current bet
+        self.current_bet = None
+    
+    def _save_bet_to_db(self):
+        """Save bet to database."""
+        if not self.current_bet:
+            return
+        
+        record = {
+            'bookmaker': self.bookmaker,
+            'amount': self.current_bet.amount,
+            'auto_stop': self.current_bet.auto_stop,
+            'entry_score': self.current_bet.entry_score,
+            'exit_score': self.current_bet.exit_score,
+            'profit': self.current_bet.profit,
+            'status': int(self.current_bet.status),
+            'strategy': self.strategy.__class__.__name__,
+            'balance_before': self.balance_current - self.current_bet.profit,
+            'balance_after': self.balance_current,
+            'placed_at': self.current_bet.placed_at,
+            'ended_at': self.current_bet.ended_at,
+            'duration': self.current_bet.ended_at - self.current_bet.placed_at
+        }
+        
+        self.db_writer.add(record)
+    
+    def _get_recent_history(self) -> List[BetInfo]:
+        """Get recent betting history."""
+        # TODO: Query from database
+        return []
+    
+    def pause(self):
+        """Pause betting (finish current bet)."""
+        self.paused = True
+        self.logger.info("Betting paused")
+    
+    def resume(self):
+        """Resume betting."""
+        self.paused = False
+        self.logger.info("Betting resumed")
+    
+    def stop(self):
+        """Stop betting agent."""
+        self.running = False
+        
+        # Flush database
+        self.db_writer.flush()
+        
+        # Final stats
+        self.logger.info(f"Final stats: Bets: {self.total_bets}, "
+                        f"Wins: {self.total_wins}, Losses: {self.total_losses}, "
+                        f"Profit: {self.total_profit:.2f}")
+    
+    def get_stats(self) -> Dict:
+        """Get current statistics."""
+        win_rate = (self.total_wins / self.total_bets * 100) if self.total_bets > 0 else 0
+        
+        return {
+            'bookmaker': self.bookmaker,
+            'strategy': self.strategy.__class__.__name__,
+            'balance_start': self.balance_start,
+            'balance_current': self.balance_current,
+            'total_profit': self.total_profit,
+            'total_bets': self.total_bets,
+            'total_wins': self.total_wins,
+            'total_losses': self.total_losses,
+            'win_rate': win_rate,
+            'current_bet': self.current_bet is not None,
+            'status': 'paused' if self.paused else 'running' if self.running else 'stopped'
+        }
