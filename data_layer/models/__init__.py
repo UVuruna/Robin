@@ -1,4 +1,12 @@
 """Data models and schemas."""
-from data_layer.models.base import Round, Threshold, Bet, RGBSample
+from data_layer.models.base import BaseModel
+from data_layer.models.round import Round
+from data_layer.models.threshold import Threshold
 
-__all__ = ['Round', 'Threshold', 'Bet', 'RGBSample']
+__all__ = [
+    'BaseModel',
+    'Round',
+    'Threshold'
+]
+
+# Note: Bet and RGBSample models will be added in future phases

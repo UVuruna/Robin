@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import List
 
 # Project root directory
-PROJECT_ROOT = Path(__file__).parent.absolute()
+PROJECT_ROOT = Path(__file__).parent.parent.absolute()
 
 class GamePhase(IntEnum):
     """
@@ -89,14 +89,22 @@ class PathConfig:
 class OCRConfig:
     """OCR configuration for Tesseract."""
 
-    oem: int = 0  # OCR Engine Mode (3 = default)
-    psm: int = 8  # Page Segmentation Mode (7 = single line)
-    
+    # Tesseract executable path (auto-detected if not specified)
+    tesseract_cmd: str = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+
+    oem: int = 0  # OCR Engine Mode (0 = Legacy, 3 = Default)
+    psm: int = 8  # Page Segmentation Mode (8 = single word, 7 = single line)
+
+    # Whitelists for different region types
     tesseract_whitelist = {
         "score": "0123456789.", # Reads: "1.52x", "12.34x", "100.00x"
-        "money": "0123456789.", # Reads: "1,234.56", "12,345.78", "123,456.78"
+        "money": "0123456789.,", # Reads: "1,234.56", "12,345.78", "123,456.78"
         "player_count": "0123456789/", # Reads: "123/1234", "45/2134"
     }
+
+    # Template matching thresholds
+    template_threshold: float = 0.99  # 99%+ accuracy required
+    template_method: int = 5  # cv2.TM_CCOEFF_NORMED
 
 
 @dataclass

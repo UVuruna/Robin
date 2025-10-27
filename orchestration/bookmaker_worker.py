@@ -14,10 +14,13 @@ from enum import Enum
 import logging
 from pathlib import Path
 
-# Import new components
-from core.ocr.fast_ocr_engine import FastOCREngine
+# Import Phase 1 components
+from core.capture.screen_capture import ScreenCapture
+from core.ocr.tesseract_ocr import TesseractOCR
+from core.ocr.template_ocr import TemplateOCR
 from core.communication.event_bus import EventPublisher, EventSubscriber, EventType, Event
-from data.database.batch_writer import BatchDatabaseWriter, BatchConfig
+from core.communication.shared_state import get_shared_state
+from data_layer.database.batch_writer import BatchDatabaseWriter, BatchConfig
 
 
 class GameState(Enum):
@@ -112,7 +115,10 @@ class BookmakerWorker:
         self.current_round = RoundData()
         
         # Components
-        self.ocr_engine = None
+        self.screen_capture = None
+        self.tesseract_ocr = None
+        self.template_ocr = None
+        self.shared_state = None
         self.event_publisher = None
         self.event_subscriber = None
         self.db_writer = None
@@ -128,21 +134,25 @@ class BookmakerWorker:
     def setup(self):
         """Setup komponenti"""
         self.logger.info(f"Setting up worker for {self.bookmaker_name}")
-        
-        # OCR Engine
-        self.ocr_engine = FastOCREngine(
-            enable_template=True,
-            enable_tesseract=True
-        )
-        
+
+        # Screen Capture
+        self.screen_capture = ScreenCapture()
+
+        # OCR Components - Use Template OCR primarily, Tesseract as fallback
+        self.template_ocr = TemplateOCR()
+        self.tesseract_ocr = TesseractOCR()
+
+        # Shared State
+        self.shared_state = get_shared_state()
+
         # Event Bus
         self.event_publisher = EventPublisher(f"Worker-{self.bookmaker_name}")
         self.event_subscriber = EventSubscriber(f"Worker-{self.bookmaker_name}")
-        
+
         # Subscribe to control events
         self.event_subscriber.subscribe(EventType.PAUSE, self.on_pause_event)
         self.event_subscriber.subscribe(EventType.CONFIG_UPDATE, self.on_config_update)
-        
+
         # Database Writer
         db_config = BatchConfig(
             batch_size=50,
@@ -150,7 +160,7 @@ class BookmakerWorker:
         )
         self.db_writer = BatchDatabaseWriter(self.db_path, db_config)
         self.db_writer.start()
-        
+
         self.logger.info("Worker setup complete")
     
     def run(self):
@@ -227,11 +237,13 @@ class BookmakerWorker:
     
     def read_score(self) -> Optional[float]:
         """
-        Čitaj score koristeći Fast OCR.
-        
+        Čitaj score koristeći Template/Tesseract OCR.
+
         Returns:
             Score ili None
         """
+        start_time = time.time()
+
         # Determine which region to use
         if self.last_score is None or self.last_score < 10:
             region_name = "score_region_small"
@@ -239,29 +251,45 @@ class BookmakerWorker:
             region_name = "score_region_medium"
         else:
             region_name = "score_region_large"
-        
+
         region = self.coords.get(region_name)
         if not region:
             return None
-        
-        # Read with OCR
-        result = self.ocr_engine.read_region(region, region_name)
-        
-        # Update metrics
-        self.metrics.ocr_operations += 1
-        self.metrics.total_ocr_time_ms += result.time_ms
-        
-        if result.value is None:
+
+        # Capture region
+        image = self.screen_capture.capture_region(region)
+        if image is None:
             self.metrics.ocr_failures += 1
             return None
-        
+
+        # Try Template OCR first (faster)
+        score_str = self.template_ocr.read_digits(image, category="score", allow_decimal=True)
+
+        # Fallback to Tesseract if template fails
+        if score_str is None:
+            score = self.tesseract_ocr.read_score(image)
+        else:
+            try:
+                score = float(score_str)
+            except (ValueError, TypeError):
+                score = None
+
+        # Update metrics
+        elapsed_ms = (time.time() - start_time) * 1000
+        self.metrics.ocr_operations += 1
+        self.metrics.total_ocr_time_ms += elapsed_ms
+
+        if score is None:
+            self.metrics.ocr_failures += 1
+            return None
+
         # Log if slow
-        if result.time_ms > 50:
+        if elapsed_ms > 50:
             self.logger.warning(
-                f"Slow OCR: {result.time_ms:.1f}ms for {region_name}"
+                f"Slow OCR: {elapsed_ms:.1f}ms for {region_name}"
             )
-        
-        return float(result.value) if isinstance(result.value, (int, float)) else None
+
+        return score
     
     def determine_state(self, score: Optional[float]) -> GameState:
         """
@@ -460,33 +488,27 @@ class BookmakerWorker:
         try:
             # Read total players
             if "other_count_region" in self.coords:
-                result = self.ocr_engine.read_region(
-                    self.coords["other_count_region"],
-                    "other_count_region"
-                )
-                
-                if result.value and '/' in str(result.value):
-                    parts = str(result.value).split('/')
-                    try:
-                        self.current_round.players_left = int(parts[0].strip())
-                        self.current_round.total_players = int(parts[1].strip())
-                    except (ValueError, IndexError):
-                        pass
-            
+                image = self.screen_capture.capture_region(self.coords["other_count_region"])
+                if image is not None:
+                    player_count_text = self.tesseract_ocr.read_player_count(image)
+
+                    if player_count_text and '/' in player_count_text:
+                        parts = player_count_text.split('/')
+                        try:
+                            self.current_round.players_left = int(parts[0].strip())
+                            self.current_round.total_players = int(parts[1].strip())
+                        except (ValueError, IndexError):
+                            pass
+
             # Read total money
             if "other_money_region" in self.coords:
-                result = self.ocr_engine.read_region(
-                    self.coords["other_money_region"],
-                    "other_money_region"
-                )
-                
-                if result.value:
-                    try:
-                        money_str = str(result.value).replace(',', '')
-                        self.current_round.total_money = float(money_str)
-                    except ValueError:
-                        pass
-                        
+                image = self.screen_capture.capture_region(self.coords["other_money_region"])
+                if image is not None:
+                    money_value = self.tesseract_ocr.read_money(image)
+
+                    if money_value is not None:
+                        self.current_round.total_money = money_value
+
         except Exception as e:
             self.logger.error(f"Error reading ended data: {e}")
     
@@ -494,40 +516,34 @@ class BookmakerWorker:
         """Čitaj broj preostalih igrača"""
         if "other_count_region" not in self.coords:
             return None
-        
-        result = self.ocr_engine.read_region(
-            self.coords["other_count_region"],
-            "other_count_region"
-        )
-        
-        if result.value and isinstance(result.value, str):
+
+        image = self.screen_capture.capture_region(self.coords["other_count_region"])
+        if image is None:
+            return None
+
+        player_count_text = self.tesseract_ocr.read_player_count(image)
+
+        if player_count_text:
             # Parse "123/456" or just "123"
-            value_str = result.value.split('/')[0].strip()
+            value_str = player_count_text.split('/')[0].strip()
             try:
                 return int(value_str)
             except ValueError:
                 return None
-        
+
         return None
     
     def read_total_money(self) -> Optional[float]:
         """Čitaj ukupan novac"""
         if "other_money_region" not in self.coords:
             return None
-        
-        result = self.ocr_engine.read_region(
-            self.coords["other_money_region"],
-            "other_money_region"
-        )
-        
-        if result.value:
-            try:
-                money_str = str(result.value).replace(',', '')
-                return float(money_str)
-            except ValueError:
-                return None
-        
-        return None
+
+        image = self.screen_capture.capture_region(self.coords["other_money_region"])
+        if image is None:
+            return None
+
+        money_value = self.tesseract_ocr.read_money(image)
+        return money_value
     
     def save_round(self):
         """Sačuvaj rundu u bazu"""
