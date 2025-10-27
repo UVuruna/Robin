@@ -7,7 +7,12 @@ aviator/                                 [PROJECT ROOT]
 │
 ├── 🎮 GLAVNI FAJLOVI
 │   ├── main.py                         ✅ [POPULATED] - GUI Control Panel
-│   ├── ARCHITECTURE.md                 ✅ [POPULATED] - Dokumentacija arhitekture  
+│   ├── README.md                       ✅ [POPULATED] - Readme file for GitHub
+│   ├── STRUCTURE.md                    ✅ [POPULATED] - Project file organization
+│   ├── ARCHITECTURE.md                 ✅ [POPULATED] - Architecture documentation
+│   ├── CHANGELOG.md                    ✅ [POPULATED] - Version history
+│   ├── CLAUDE.md                       ✅ [POPULATED] - AI instructions
+│   ├── project_knowledge.md            ✅ [POPULATED] - Project knowledge instructions
 │   └── requirements.txt                ✅ [EXISTS] - Dependencies
 │
 ├── 📁 core/                            [JEZGRO SISTEMA]

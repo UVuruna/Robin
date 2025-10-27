@@ -194,6 +194,41 @@ data_layer/
 - Kratak opis < 50 karaktera
 - Detaljan opis ako treba
 
+## SESSION WORKFLOW
+
+### 🚀 On Session Start
+1. **ALWAYS load and read these files:**
+   - `CLAUDE.md` - Core technical principles
+   - `ARCHITECTURE.md` - System structure  
+   - `STRUCTURE.md` - File organization
+   - `Project Knowledge Instructions` - Workflow rules
+
+2. **Analyze current task scope:**
+   - Identify which module/folder is being worked on
+   - Check dependencies (what imports this, what does it import)
+   - Review related test files
+
+### ✅ After Completing Work
+1. **Update documentation:**
+   - `CHANGELOG.md` - Add entry for changes made
+   - `ARCHITECTURE.md` - Update if structure changed
+   - `README.md` - Update if functionality added
+   - `__init__.py` - Update exports in affected folder
+
+2. **Check impact on related files:**
+   - Analyze all files that import the changed module
+   - Update import statements if needed
+   - Adapt interfaces if structure changed
+   - Run related tests to verify
+
+3. **Dependency chain verification:**
+   ```python
+   # Example: If changing core/ocr/engine.py
+   Check → collectors/* (uses OCR)
+   Check → orchestration/shared_reader.py (uses OCR)
+   Check → tests/test_ocr.py (tests OCR)
+   ```
+
 ## REMEMBER ALWAYS
 
 1. **Data Accuracy > Speed** - Bolje spor i tačan nego brz i netačan
@@ -203,3 +238,5 @@ data_layer/
 5. **Atomic Transactions** - All or nothing za betting
 6. **Health Monitoring** - Auto-recovery za sve
 7. **Clean Code** - Readability > cleverness
+8. **Update Docs** - Always update CHANGELOG after work
+9. **Check Dependencies** - Verify impact on related files

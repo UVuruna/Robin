@@ -4,14 +4,41 @@
 
 When starting a new Claude session for AVIATOR project development:
 
-### 1. ALWAYS LOAD THESE FILES
+### 1. ALWAYS LOAD THESE FILES ON START
 ```
 1. CLAUDE.md          - Core technical principles
 2. ARCHITECTURE.md    - System structure
-3. Current module     - File you're working on
+3. STRUCTURE.md       - File organization
+4. Project Knowledge INSTRUCTIONS - This file
+5. Current module     - File you're working on
+6. Related modules    - Files that import or are imported by current
 ```
 
-### 2. CORE PRINCIPLES TO REMEMBER
+### 2. WORK COMPLETION WORKFLOW
+
+#### After completing ANY work:
+```python
+# 1. Update documentation
+UPDATE → CHANGELOG.md (add entry for changes)
+UPDATE → ARCHITECTURE.md (if structure changed)
+UPDATE → README.md (if functionality added)
+UPDATE → __init__.py (update exports in folder)
+
+# 2. Check dependency chain
+ANALYZE → Files that import this module
+ANALYZE → Files this module imports
+UPDATE → Any broken imports
+UPDATE → Any changed interfaces
+
+# 3. Example workflow
+If changed: core/ocr/engine.py
+Then check: → collectors/main_collector.py
+           → orchestration/shared_reader.py
+           → tests/test_ocr.py
+           → Update all if needed
+```
+
+### 3. CORE PRINCIPLES TO REMEMBER
 
 #### DATA ACCURACY > SPEED
 - Never sacrifice accuracy for performance

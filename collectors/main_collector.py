@@ -9,11 +9,11 @@ from typing import Dict, Optional, Any
 from datetime import datetime
 import logging
 
-from config import GamePhase
+from config.settings import GamePhase
 from core.communication.event_bus import EventPublisher
 
 
-class MainDataCollectorV2:
+class MainDataCollector:
     """
     Main data collector koji koristi shared reader.
     
@@ -267,7 +267,7 @@ def main_collector_worker(bookmaker: str,
     event_publisher = EventPublisher(f"MainCollector-{bookmaker}")
     
     # Create collector
-    collector = MainDataCollectorV2(
+    collector = MainDataCollector(
         bookmaker=bookmaker,
         shared_reader=shared_reader,
         db_writer=db_writer,

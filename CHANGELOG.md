@@ -5,9 +5,66 @@
 **All notable changes to the AVIATOR project**
 
 [![Semantic Versioning](https://img.shields.io/badge/Semantic%20Versioning-2.0.0-blue)]()
-[![Last Update](https://img.shields.io/badge/Last%20Update-2024--12--20-green)]()
+[![Last Update](https://img.shields.io/badge/Last%20Update-2025--11--27-green)]()
 
 </div>
+
+---
+
+## 🎯 IMPLEMENTATION ROADMAP
+
+### Phase 1: Core Infrastructure 🔴 **PRIORITY**
+Must be completed first as everything depends on these:
+
+#### `core/` folder
+- [ ] `core/capture/region_manager.py` - Region coordinate management
+- [ ] `core/ocr/tesseract_ocr.py` - Tesseract wrapper implementation
+- [ ] `core/ocr/template_ocr.py` - Template matching OCR
+- [ ] `core/input/action_queue.py` - Priority action queue
+- [ ] `core/communication/shared_state.py` - Shared memory state
+
+#### `data_layer/` folder  
+- [ ] `data_layer/models/base.py` - Data models (Round, Threshold, Bet, RGB)
+- [ ] `data_layer/models/round.py` - Round specific model
+- [ ] `data_layer/models/threshold.py` - Threshold specific model
+- [ ] `data_layer/database/connection.py` - Connection pool implementation
+- [ ] `data_layer/database/query_builder.py` - SQL query builder
+
+### Phase 2: Orchestration Layer 🟠
+Depends on Core, needed before Collectors/Agents:
+
+#### `orchestration/` folder
+- [ ] `orchestration/coordinator.py` - Multi-worker synchronization
+- [ ] `orchestration/health_monitor.py` - Process health monitoring
+- [ ] `orchestration/bookmaker_worker.py` - Individual worker process
+
+### Phase 3: Business Logic 🟡
+Depends on Core + Orchestration:
+
+#### `collectors/` folder
+- [ ] `collectors/base_collector.py` - Abstract base collector
+- [ ] `collectors/phase_collector.py` - Game phase collector
+
+#### `strategies/` folder
+- [ ] `strategies/martingale.py` - Martingale betting strategy
+- [ ] `strategies/fibonacci.py` - Fibonacci betting strategy
+- [ ] `strategies/custom_strategy.py` - Custom strategy templates
+
+### Phase 4: Automation Agents 🟢
+Depends on all above:
+
+#### `agents/` folder
+- [ ] `agents/session_keeper.py` - Session maintenance agent
+- [ ] `agents/strategy_executor.py` - Strategy execution engine
+
+### Phase 5: Future Enhancements 🔵
+Optional improvements:
+
+#### `data_layer/cache/` folder
+- [ ] `data_layer/cache/redis_cache.py` - Redis caching layer
+
+#### `core/ocr/` folder
+- [ ] `core/ocr/cnn_ocr.py` - CNN-based OCR (ML model)
 
 ---
 
@@ -40,7 +97,7 @@ MAJOR.MINOR.PATCH (YYYY-MM-DD)
 
 ---
 
-## [2.0.0] - 2024-12-20 🎉 **MAJOR RELEASE**
+## [2.0.0] - 2025-11-27 🎉 **MAJOR RELEASE**
 
 ### 🚀 Complete Architecture Refactoring
 
@@ -80,7 +137,7 @@ This version represents a complete rewrite of the core architecture, introducing
 
 ---
 
-## [1.9.0] - 2024-12-15 ⚙️
+## [1.9.0] - 2025-11-24 ⚙️
 
 ### GUI Control Panel Release
 
@@ -103,7 +160,7 @@ This version represents a complete rewrite of the core architecture, introducing
 
 ---
 
-## [1.8.0] - 2024-12-10 🤖
+## [1.8.0] - 2025-11-18 🤖
 
 ### ML Integration Update
 
@@ -124,7 +181,7 @@ This version represents a complete rewrite of the core architecture, introducing
 
 ---
 
-## [1.7.0] - 2024-12-05 💰
+## [1.7.0] - 2025-11-13 💰
 
 ### Betting Automation
 
@@ -146,7 +203,7 @@ This version represents a complete rewrite of the core architecture, introducing
 
 ---
 
-## [1.6.0] - 2024-12-01 📊
+## [1.6.0] - 2025-11-5 📊
 
 ### Multi-Bookmaker Support
 
@@ -163,7 +220,7 @@ This version represents a complete rewrite of the core architecture, introducing
 
 ---
 
-## [1.5.0] - 2024-11-25 🎯
+## [1.5.0] - 2025-11-1 🎯
 
 ### Threshold Tracking System
 
@@ -180,7 +237,7 @@ This version represents a complete rewrite of the core architecture, introducing
 
 ---
 
-## [1.4.0] - 2024-11-20 🔍
+## [1.4.0] - 2025-10-25 🔍
 
 ### OCR Optimization
 
@@ -196,7 +253,7 @@ This version represents a complete rewrite of the core architecture, introducing
 
 ---
 
-## [1.3.0] - 2024-11-15 💾
+## [1.3.0] - 2025-10-19 💾
 
 ### Database Layer Enhancement
 
@@ -213,7 +270,7 @@ This version represents a complete rewrite of the core architecture, introducing
 
 ---
 
-## [1.2.0] - 2024-11-10 📸
+## [1.2.0] - 2025-10-16 📸
 
 ### Screen Capture System
 
@@ -230,7 +287,7 @@ This version represents a complete rewrite of the core architecture, introducing
 
 ---
 
-## [1.1.0] - 2024-11-05 🏗️
+## [1.1.0] - 2025-10-14 🏗️
 
 ### Core Infrastructure
 
@@ -247,7 +304,7 @@ This version represents a complete rewrite of the core architecture, introducing
 
 ---
 
-## [1.0.0] - 2024-11-01 🎬
+## [1.0.0] - 2025-10-12 🎬
 
 ### Initial Release
 
@@ -265,7 +322,7 @@ This version represents a complete rewrite of the core architecture, introducing
 
 ---
 
-## [0.9.0-beta] - 2024-10-25 🧪
+## [0.9.0-beta] - 2025-10-8 🧪
 
 ### Beta Release
 
@@ -341,7 +398,7 @@ Version  | OCR Speed | DB Writes/sec | Memory | CPU Usage
 
 <div align="center">
 
-**Version 2.0.0** | **Released: 2024-12-20**
+**Version 2.0.0** | **Released: 2025-11-27**
 
 [⬆ Back to Top](#-changelog) | [📖 README](README.md) | [🏛️ Architecture](ARCHITECTURE.md)
 

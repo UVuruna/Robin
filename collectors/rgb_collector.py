@@ -15,7 +15,7 @@ import logging
 from core.communication.event_bus import EventPublisher, EventType
 
 
-class RGBCollectorV2:
+class RGBCollector:
     """
     RGB Collector za prikupljanje podataka za treniranje game phase modela.
     
@@ -191,7 +191,7 @@ def rgb_collector_worker(bookmaker: str,
     event_publisher = EventPublisher(f"RGBCollector-{bookmaker}")
     
     # Create collector
-    collector = RGBCollectorV2(
+    collector = RGBCollector(
         bookmaker=bookmaker,
         coords=coords,
         db_writer=db_writer,
