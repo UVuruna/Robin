@@ -7,7 +7,6 @@ import logging
 from typing import Dict, Optional, List, Callable
 from dataclasses import dataclass
 from enum import IntEnum
-from collections import deque
 
 from core.input.transaction_controller import TransactionController, Priority
 from core.communication.event_bus import EventPublisher, EventSubscriber, EventType

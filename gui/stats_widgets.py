@@ -9,7 +9,7 @@ from PySide6.QtCore import QTimer
 import sqlite3
 from datetime import datetime
 from typing import Dict, Optional
-from config import PATH
+from config.settings import PATH
 from utils.logger import AviatorLogger
 
 class DataCollectorStats(QWidget):

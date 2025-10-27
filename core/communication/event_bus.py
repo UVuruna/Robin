@@ -7,7 +7,7 @@ Koristi multiprocessing Queue i Manager za thread-safe i process-safe komunikaci
 import time
 import threading
 import multiprocessing as mp
-from multiprocessing import Manager, Process
+from multiprocessing import Process
 from typing import Dict, Any, Callable, List, Optional
 from dataclasses import dataclass, field
 from enum import Enum

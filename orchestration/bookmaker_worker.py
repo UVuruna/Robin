@@ -27,10 +27,10 @@ Version: 3.0
 """
 
 import multiprocessing as mp
-from multiprocessing import Event as MPEvent, Queue
+from multiprocessing import Queue
+from multiprocessing.synchronize import Event as MPEvent
 import time
-import threading
-from typing import Dict, Optional, List, Any, Callable
+from typing import Dict, Optional, List, Any
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -817,7 +817,6 @@ def test_worker():
     }
 
     # Create shared BatchWriter
-    from pathlib import Path
     db_path = Path("data/databases/test.db")
     db_path.parent.mkdir(parents=True, exist_ok=True)
 

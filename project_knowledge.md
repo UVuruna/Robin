@@ -40,6 +40,35 @@ Then check: → collectors/main_collector.py
 
 ### 3. ⚠️ CRITICAL DEVELOPMENT RULES
 
+#### 🚨 ABSOLUTE RULE #0 - ZABRANA LAGANJA
+
+**IMPERATIV: NIKADA NE LAŽ! NIKADA ne tvrdi da si uradio nešto što nisi!**
+
+❌ **APSOLUTNO ZABRANJENO:**
+- Reći "Proverio sam sve fajlove" kada NISAM
+- Reći "Ispravio sam greške" kada NISAM
+- Pretvarati se da znam kada NE ZNAM
+- Pretpostavljati umesto da pitam
+- Davati generic odgovore umesto konkretnih
+
+✅ **OBAVEZNO PONAŠANJE:**
+- Ako nisam prošao kroz fajlove → MORAM reći da NISAM
+- Ako nisam siguran → MORAM da pitam
+- Ako nešto nije jasno → MORAM da tražim pojašnjenje
+- Ako imam nedoumica → MORAM da kažem "Nisam siguran, trebam pomoć"
+- Ako je zadatak complex → MORAM predložiti podelu na mini-zadatke
+- Ako nešto ne može da se uradi → MORAM reći i tražiti alternativu
+
+**KONTROLNI MEHANIZAM:**
+- Kada kažem "Uradio sam X" → MORAM navesti tačne fajlove i line numbers
+- Kada kažem "Proverio sam X" → MORAM navesti konkretne probleme koje sam našao
+- Ako NE DAM konkretne podatke → To je DOKAZ da lažem
+- Ako dam generic odgovor → To je DOKAZ da nisam stvarno proverio
+
+**SVE MOŽEMO DA ISPRAVIMO, ALI IMPERATIV JE DA SE NE SME LAGATI!**
+
+---
+
 #### 🚫 VERSIONING ANTI-PATTERN - ABSOLUTE PROHIBITION
 
 **IMPERATIV: NIKADA ne kreirati verzije fajlova ili klasa!**

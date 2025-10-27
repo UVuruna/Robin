@@ -13,9 +13,9 @@ Architecture:
     - Svaki bookmaker ima svoj instance
 
 Data Flow:
-    Worker Process ’ BettingAgent ’ StrategyExecutor
-    BettingAgent.round_history (deque 100) ’ StrategyExecutor.decide()
-    ’ decision ’ BettingAgent izvraava
+    Worker Process ï¿½ BettingAgent ï¿½ StrategyExecutor
+    BettingAgent.round_history (deque 100) ï¿½ StrategyExecutor.decide()
+    ï¿½ decision ï¿½ BettingAgent izvraava
 
 Strategija format:
     - bet_amounts: Lista bet iznosa [10, 20, 40, 70, 120, 200]
@@ -35,14 +35,15 @@ class StrategyDecision:
     auto_stops: List[float]   # [2.20, 2.20, 2.50, ...]
     current_index: int        # Current position in strategy
     strategy_name: str        # "Martingale", "Fibonacci", etc.
-    confidence: float = 1.0   # 0.0-1.0, za budue ML modele
+    confidence: float = 1.0   # 0.0-1.0, za buduce ML modele
 
 
 class StrategyExecutor:
     """
     Strategy decision engine.
 
-    Analizira istoriju rundi i odluuje o betting strategiji.
+    Analizira istoriju rundi i odlu
+uje o betting strategiji.
     Stateless - sve ato mu treba je u round_history parametru.
     """
 
@@ -199,7 +200,7 @@ class StrategyExecutor:
         last_round = round_history[-1]
         last_score = last_round.get('score', 0.0)
 
-        # Simple logic: if last score > 2.0, consider it "winnable" ’ reset to 0
+        # Simple logic: if last score > 2.0, consider it "winnable" ï¿½ reset to 0
         # Otherwise, progress to next step
         # TODO: This needs proper bet result tracking from BettingAgent
 
@@ -299,7 +300,7 @@ if __name__ == "__main__":
 
     # Get decision
     decision = executor.decide(mock_history)
-    print(f"\nStrategy Decision:")
+    print("\nStrategy Decision:")
     print(f"  Strategy: {decision['strategy_name']}")
     print(f"  Bet Amounts: {decision['bet_amounts']}")
     print(f"  Auto Stops: {decision['auto_stops']}")
@@ -308,6 +309,6 @@ if __name__ == "__main__":
 
     # Analyze history
     analysis = executor.analyze_history(mock_history)
-    print(f"\nHistory Analysis:")
+    print("\nHistory Analysis:")
     for key, value in analysis.items():
         print(f"  {key}: {value}")

@@ -4,7 +4,7 @@ Shared Game State Reader - Centralizovano čitanje za sve procese.
 Čita jednom, deli sa svima preko shared memory.
 """
 
-from multiprocessing import Manager, Process, Event
+from multiprocessing import Process, Event
 import time
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass

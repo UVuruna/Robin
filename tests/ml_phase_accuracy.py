@@ -35,9 +35,7 @@ class MLPhaseTestWorker(QThread):
 
     def run(self):
         try:
-            from core.coord_manager import CoordsManager
-            from core.screen_reader import ScreenReader
-            from config import PATH, GamePhase, BetState
+            from config.settings import PATH, GamePhase, BetState
 
             self.log.emit("Initializing ML phase test...")
             self.log.emit(f"Iterations: {self.iterations}")

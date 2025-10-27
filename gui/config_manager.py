@@ -3,7 +3,7 @@
 # PURPOSE: Manage config.json for GUI
 
 import json
-from config import PATH
+from config.settings import PATH
 from typing import Dict, Any
 from utils.logger import AviatorLogger
 

@@ -5,7 +5,8 @@ Automatski health check, restart, graceful shutdown.
 """
 
 import multiprocessing as mp
-from multiprocessing import Process, Queue, Event as MPEvent, Manager
+from multiprocessing import Process, Queue, Manager
+from multiprocessing.synchronize import Event as MPEvent
 import threading
 import time
 import signal

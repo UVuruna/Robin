@@ -36,9 +36,7 @@ class MLPhaseSpeedWorker(QThread):
 
     def run(self):
         try:
-            from core.coord_manager import CoordsManager
-            from core.screen_reader import ScreenReader
-            from config import PATH, GamePhase, BetState
+            from config.settings import PATH, GamePhase, BetState
 
             mode_str = f"{self.value}s" if self.mode == "time" else f"{self.value} iterations"
             self.log.emit(f"Initializing benchmark ({mode_str})...")

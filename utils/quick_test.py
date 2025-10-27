@@ -9,8 +9,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import json
-from core.coord_manager import CoordsManager
-from config import PATH
+from config.settings import PATH
 
 
 def test_json_format():

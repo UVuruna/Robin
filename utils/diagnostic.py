@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QFont
-from config import PATH
+from config.settings import PATH
 
 class DiagnosticWorker(QThread):
     """Worker thread for system diagnostics."""

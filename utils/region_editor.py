@@ -150,7 +150,6 @@ class RegionEditorDialog(QDialog):
     def _get_position_offset(self):
         """Get position offset from CoordsManager."""
         try:
-            from core.coord_manager import CoordsManager
 
             manager = CoordsManager()
             self.position_offset = manager.get_position_offset(

@@ -14,7 +14,7 @@ Kontroler za Aviator aplikacije sa Worker Process Pattern.
 Version: 3.0
 """
 
-from typing import Dict, Optional, Callable, List, Any
+from typing import Dict, Optional, Callable, Any
 from collections import deque
 import logging
 from pathlib import Path
@@ -172,7 +172,7 @@ class AppController:
             self.app_states[app_name]["running"] = True
             self.app_states[app_name]["workers"] = workers_started
             self._send_log(app_name, f"=== {app_name.upper()} STARTED ({len(workers_started)} workers) ===")
-            self._send_log(app_name, f"Architecture: Worker Process Pattern (v3.0)")
+            self._send_log(app_name, "Architecture: Worker Process Pattern (v3.0)")
             return True
 
         return False

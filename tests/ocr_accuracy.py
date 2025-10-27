@@ -33,8 +33,6 @@ class OCRTestWorker(QThread):
 
     def run(self):
         try:
-            from core.coord_manager import CoordsManager
-            from core.screen_reader import ScreenReader
 
             self.log.emit("Initializing OCR test...")
             self.log.emit(f"Iterations: {self.iterations}")

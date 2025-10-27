@@ -65,7 +65,7 @@ def init_logging(
 
     # Import config here to avoid circular imports
     try:
-        from config import PATH, LOGGING
+        from config.settings import PATH, LOGGING
 
         log_dir = PATH.logs_dir
         log_format = LOGGING.format
@@ -162,7 +162,7 @@ def get_module_logger(
         for h in logger.handlers
     ):
         try:
-            from config import PATH, LOGGING
+            from config.settings import PATH, LOGGING
 
             log_dir = PATH.logs_dir
             max_bytes = LOGGING.max_bytes

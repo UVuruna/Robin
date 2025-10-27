@@ -9,8 +9,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
 from typing import Dict
 import json
-from core.coord_manager import CoordsManager
-from config import PATH
+from config.settings import PATH
 
 class ToolsTab(QWidget):
     """Tools tab - ULTRA COMPACT version with collapsible sections."""
