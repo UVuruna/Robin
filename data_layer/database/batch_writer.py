@@ -146,6 +146,9 @@ class BatchDatabaseWriter:
         self.writer_thread = None
         self.flush_thread = None
         
+        # Logging (MUST be initialized BEFORE _cache_table_schemas())
+        self.logger = logging.getLogger("BatchWriter")
+
         # Statistics
         self.stats = {
             'total_writes': 0,
@@ -155,13 +158,10 @@ class BatchDatabaseWriter:
             'avg_batch_size': 0,
             'last_flush_time': None
         }
-        
+
         # Table schemas cache
         self.table_schemas = {}
         self._cache_table_schemas()
-        
-        # Logging
-        self.logger = logging.getLogger("BatchWriter")
     
     def _cache_table_schemas(self):
         """Keširaj sheme tabela za validaciju"""

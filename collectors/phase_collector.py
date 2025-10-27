@@ -37,7 +37,7 @@ class PhaseCollector(BaseCollector):
     Collector for game phase transitions.
 
     Tracks:
-    - Phase changes (BETTING → PLAYING → ENDED, etc.)
+    - Phase changes (BETTING ->-> PLAYING ->-> ENDED, etc.)
     - Duration in each phase
     - Score at phase transitions
     - Phase patterns for analysis

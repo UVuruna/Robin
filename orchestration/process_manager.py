@@ -81,7 +81,7 @@ class ProcessManager:
         
         # Multiprocessing components
         self.manager = Manager()
-        self.shutdown_event = MPEvent()
+        self.shutdown_event = self.manager.Event()  # Use manager.Event() instead of MPEvent()
         self.health_queue = self.manager.Queue()
         
         # Control

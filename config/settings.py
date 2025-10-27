@@ -98,7 +98,7 @@ class OCRConfig:
     # Whitelists for different region types
     tesseract_whitelist = {
         "score": "0123456789.", # Reads: "1.52x", "12.34x", "100.00x"
-        "money": "0123456789.,", # Reads: "1,234.56", "12,345.78", "123,456.78"
+        "money": "0123456789.", # Reads: "1,234.56", "12,345.78", "123,456.78"
         "player_count": "0123456789/", # Reads: "123/1234", "45/2134"
     }
 

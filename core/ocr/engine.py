@@ -11,7 +11,7 @@ from typing import Optional, Dict, Any
 from pathlib import Path
 from enum import IntEnum
 
-from config import GamePhase, OCR
+from config import GamePhase, OCRConfig
 
 class OCRMethod(IntEnum):
     """Available OCR methods."""

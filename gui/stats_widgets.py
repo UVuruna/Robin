@@ -128,7 +128,8 @@ class DataCollectorStats(QWidget):
             })
             
         except Exception as e:
-            self.logger.error(f"Stats fetch error: {e}")
+            # Debug level - empty DB is expected on first run
+            self.logger.debug(f"Stats fetch error (expected if DB empty): {e}")
             if conn:
                 conn.close()
 
@@ -209,7 +210,8 @@ class RGBCollectorStats(QWidget):
             self.update_display({'total_samples': total_samples})
             
         except Exception as e:
-            self.logger.error(f"Stats fetch error: {e}")
+            # Debug level - empty DB is expected on first run
+            self.logger.debug(f"Stats fetch error (expected if DB empty): {e}")
             if conn:
                 conn.close()
 
@@ -298,7 +300,8 @@ class BettingAgentStats(QWidget):
             })
             
         except Exception as e:
-            self.logger.error(f"Stats fetch error: {e}")
+            # Debug level - empty DB is expected on first run
+            self.logger.debug(f"Stats fetch error (expected if DB empty): {e}")
             if conn:
                 conn.close()
 

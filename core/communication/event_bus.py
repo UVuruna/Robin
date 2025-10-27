@@ -104,33 +104,28 @@ class EventBus:
     def __init__(self):
         if not hasattr(self, 'initialized'):
             self.initialized = True
-            
-            # Multiprocessing components
-            self.manager = SyncManager()
-            self.event_queue = self.manager.Queue()
-            self.subscribers = self.manager.dict()  # {event_type: [subscriber_ids]}
+
+            # Multiprocessing components (initialized in start())
+            self.manager = None
+            self.event_queue = None
+            self.subscribers = None
             self.callbacks = {}  # Local callbacks (not shared between processes)
-            
+
             # Control
             self.running = False
             self.dispatcher_thread = None
             self.dispatcher_process = None
-            
+
             # Statistics
-            self.stats = self.manager.dict({
-                'events_sent': 0,
-                'events_processed': 0,
-                'events_failed': 0,
-                'last_event_time': None
-            })
-            
+            self.stats = None
+
             # Logging
             self.logger = logging.getLogger("EventBus")
-            
+
             # Event history (circular buffer)
             self.history_size = 1000
-            self.event_history = self.manager.list()
-            
+            self.event_history = None
+
             # Rate limiting
             self.rate_limits = {}  # {source: {'count': 0, 'reset_time': time}}
             self.rate_limit_window = 60  # seconds
@@ -139,7 +134,7 @@ class EventBus:
     def start(self, use_process: bool = True):
         """
         Pokreni event bus.
-        
+
         Args:
             use_process: Ako je True, koristi Process za dispatcher (za multiprocessing)
                         Ako je False, koristi Thread (za single process)
@@ -147,6 +142,23 @@ class EventBus:
         if self.running:
             self.logger.warning("EventBus already running")
             return
+
+        # Initialize multiprocessing components HERE (not in __init__)
+        if self.manager is None:
+            self.logger.info("Initializing EventBus multiprocessing components...")
+            self.manager = SyncManager()
+            self.manager.start()  # CRITICAL: Start manager BEFORE creating shared objects!
+
+            self.event_queue = self.manager.Queue()
+            self.subscribers = self.manager.dict()
+            self.stats = self.manager.dict({
+                'events_sent': 0,
+                'events_processed': 0,
+                'events_failed': 0,
+                'last_event_time': None
+            })
+            self.event_history = self.manager.list()
+            self.logger.info("EventBus multiprocessing components initialized")
         
         self.running = True
         
@@ -214,15 +226,21 @@ class EventBus:
             self.callbacks[event_type] = {}
         self.callbacks[event_type][subscriber_id] = callback
         
-        # Register in shared dict
-        if event_type.value not in self.subscribers:
-            self.subscribers[event_type.value] = []
-        
-        subscribers_list = list(self.subscribers[event_type.value])
-        if subscriber_id not in subscribers_list:
-            subscribers_list.append(subscriber_id)
-            self.subscribers[event_type.value] = subscribers_list
-        
+        # Register in shared dict (only if EventBus is started)
+        if self.subscribers is not None:
+            try:
+                if event_type.value not in self.subscribers:
+                    self.subscribers[event_type.value] = []
+
+                subscribers_list = list(self.subscribers[event_type.value])
+                if subscriber_id not in subscribers_list:
+                    subscribers_list.append(subscriber_id)
+                    self.subscribers[event_type.value] = subscribers_list
+            except (TypeError, AttributeError) as e:
+                self.logger.warning(f"EventBus not fully initialized - subscriber {subscriber_id} registered locally only: {e}")
+        else:
+            self.logger.warning(f"EventBus not started yet - subscriber {subscriber_id} registered locally only")
+
         self.logger.debug(f"Subscribed {subscriber_id} to {event_type.value}")
         return subscriber_id
 
@@ -244,25 +262,30 @@ class EventBus:
     def publish(self, event: Event):
         """
         Objavi event.
-        
+
         Args:
             event: Event za objavljivanje
         """
+        # Check if EventBus is started
+        if self.event_queue is None:
+            self.logger.warning(f"EventBus not started - cannot publish {event.type.value}")
+            return
+
         # Rate limiting
         if not self._check_rate_limit(event.source):
             self.logger.warning(f"Rate limit exceeded for {event.source}")
             return
-        
+
         # Add to queue
         self.event_queue.put((event.priority, event.to_dict()))
-        
+
         # Update stats
         self.stats['events_sent'] = self.stats['events_sent'] + 1
         self.stats['last_event_time'] = time.time()
-        
+
         # Add to history
         self._add_to_history(event)
-        
+
         self.logger.debug(f"Published {event.type.value} from {event.source}")
 
     def publish_async(self, event: Event):

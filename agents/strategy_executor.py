@@ -13,9 +13,9 @@ Architecture:
     - Svaki bookmaker ima svoj instance
 
 Data Flow:
-    Worker Process � BettingAgent � StrategyExecutor
-    BettingAgent.round_history (deque 100) � StrategyExecutor.decide()
-    � decision � BettingAgent izvraava
+    Worker Process -> BettingAgent -> StrategyExecutor
+    BettingAgent.round_history (deque 100) -> StrategyExecutor.decide()
+    -> decision -> BettingAgent izvršava
 
 Strategija format:
     - bet_amounts: Lista bet iznosa [10, 20, 40, 70, 120, 200]
@@ -200,7 +200,7 @@ uje o betting strategiji.
         last_round = round_history[-1]
         last_score = last_round.get('score', 0.0)
 
-        # Simple logic: if last score > 2.0, consider it "winnable" � reset to 0
+        # Simple logic: if last score > 2.0, consider it "winnable" -> reset to 0
         # Otherwise, progress to next step
         # TODO: This needs proper bet result tracking from BettingAgent
 
