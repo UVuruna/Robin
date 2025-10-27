@@ -8,11 +8,12 @@ from typing import Dict, Optional, List, Callable
 from dataclasses import dataclass
 from enum import IntEnum
 
-from core.input.transaction_controller import TransactionController, Priority
+from core.input.transaction_controller import TransactionController
 from core.communication.event_bus import EventPublisher, EventSubscriber, EventType
 from data_layer.database.batch_writer import BatchDatabaseWriter
 from config import GamePhase, BettingConfig
 from strategies.base_strategy import BaseStrategy
+from agents.strategy_executor import StrategyExecutor
 
 class BetStatus(IntEnum):
     """Status of current bet."""
@@ -253,7 +254,7 @@ class BettingAgent:
                 amount=amount,
                 auto_stop=auto_stop,
                 coords=self.coords,
-                priority=Priority.HIGH
+                priority=3  # HIGH priority (1=CRITICAL, 3=HIGH, 5=NORMAL, 7=LOW, 10=LOWEST)
             )
             
             if success:
@@ -286,7 +287,7 @@ class BettingAgent:
             success = self.tx_controller.cash_out(
                 bookmaker=self.bookmaker,
                 coords=self.coords,
-                priority=Priority.CRITICAL
+                priority=1  # CRITICAL priority (cash out is time-sensitive!)
             )
             
             if success and self.current_bet:

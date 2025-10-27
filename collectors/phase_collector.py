@@ -37,7 +37,7 @@ class PhaseCollector(BaseCollector):
     Collector for game phase transitions.
 
     Tracks:
-    - Phase changes (BETTING ’ PLAYING ’ ENDED, etc.)
+    - Phase changes (BETTING â†’ PLAYING â†’ ENDED, etc.)
     - Duration in each phase
     - Score at phase transitions
     - Phase patterns for analysis
@@ -132,7 +132,7 @@ class PhaseCollector(BaseCollector):
 
         # Log transition
         self.logger.info(
-            f"Phase transition: {from_phase.value} ’ {to_phase.value} "
+            f"Phase transition: {from_phase.value} ï¿½ {to_phase.value} "
             f"(duration: {duration:.2f}s, score: {score})"
         )
 
@@ -210,7 +210,7 @@ class PhaseCollector(BaseCollector):
             from_phase = GamePhase(data["from_phase"])
             to_phase = GamePhase(data["to_phase"])
         except ValueError:
-            self.logger.warning(f"Invalid phase values: {data['from_phase']} ’ {data['to_phase']}")
+            self.logger.warning(f"Invalid phase values: {data['from_phase']} ï¿½ {data['to_phase']}")
             return False
 
         # Validate score if present
@@ -329,7 +329,7 @@ class PhaseCollector(BaseCollector):
 
         # Log recent pattern
         pattern = self.get_phase_pattern()
-        self.logger.info(f"Recent phase pattern: {' ’ '.join(pattern)}")
+        self.logger.info(f"Recent phase pattern: {' ï¿½ '.join(pattern)}")
 
         # Call base cleanup
         super().cleanup()
@@ -393,11 +393,11 @@ if __name__ == "__main__":
     print("\n=== Recent Transitions ===")
     recent = collector.get_recent_transitions(5)
     for trans in recent:
-        print(f"{trans['from_phase']} ’ {trans['to_phase']} (score: {trans['score']}, duration: {trans['duration']:.2f}s)")
+        print(f"{trans['from_phase']} ï¿½ {trans['to_phase']} (score: {trans['score']}, duration: {trans['duration']:.2f}s)")
 
     print("\n=== Recent Pattern ===")
     pattern = collector.get_phase_pattern()
-    print(" ’ ".join(pattern))
+    print(" ï¿½ ".join(pattern))
 
     # Cleanup
     collector.cleanup()

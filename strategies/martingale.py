@@ -6,8 +6,8 @@ Version: 2.0
 Martingale strategy:
 - User defines bet list: [10, 20, 40, 80, 150, 300, 550, 1000]
 - User defines auto_stop multiplier (e.g., 2.3x)
-- Win ’ Reset to index 0
-- Loss ’ Move to next index (circular)
+- Win â†’ Reset to index 0
+- Loss â†’ Move to next index (circular)
 - Simple, deterministic progression
 """
 
@@ -26,8 +26,8 @@ class MartingaleStrategy(BaseStrategy):
     1. User provides bet_list: [10, 20, 40, 80, 150, 300, 550, 1000]
     2. User provides auto_stop: 2.3 (cash out at 2.3x multiplier)
     3. Start at index 0 (first bet in list)
-    4. Win ’ index = 0 (reset to start)
-    5. Loss ’ index = (index + 1) % len(bet_list) (circular progression)
+    4. Win â†’ index = 0 (reset to start)
+    5. Loss â†’ index = (index + 1) % len(bet_list) (circular progression)
 
     Features:
     - Fixed auto_stop multiplier (no dynamic cash-out)
@@ -191,7 +191,7 @@ class MartingaleStrategy(BaseStrategy):
         self.current_index = 0
 
         self.logger.info(
-            f"Index reset: {old_index} ’ {self.current_index} "
+            f"Index reset: {old_index} ï¿½ {self.current_index} "
             f"(Total profit: {self.total_profit:.2f})"
         )
 
@@ -224,13 +224,13 @@ class MartingaleStrategy(BaseStrategy):
         if self.current_index < old_index:
             self.cycle_count += 1
             self.logger.warning(
-                f"  Wrapped around bet list! "
+                f"ï¿½ Wrapped around bet list! "
                 f"Accepting big loss and restarting. "
                 f"Cycle count: {self.cycle_count}"
             )
 
         self.logger.info(
-            f"Index progressed: {old_index} ’ {self.current_index} "
+            f"Index progressed: {old_index} ï¿½ {self.current_index} "
             f"(Total profit: {self.total_profit:.2f})"
         )
 
