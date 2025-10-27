@@ -10,7 +10,6 @@ __author__ = "AVIATOR Team"
 # Core imports for easy access
 from core.communication.event_bus import EventBus, EventPublisher, EventSubscriber
 from orchestration.process_manager import ProcessManager
-from orchestration.shared_reader import SharedGameStateReader
 
 # Initialize logging on import
 from utils.logger import init_logging
@@ -18,10 +17,9 @@ init_logging()
 
 __all__ = [
     'EventBus',
-    'EventPublisher', 
+    'EventPublisher',
     'EventSubscriber',
     'ProcessManager',
-    'SharedGameStateReader',
     '__version__'
 ]
 

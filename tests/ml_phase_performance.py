@@ -59,8 +59,15 @@ class MLPhaseSpeedWorker(QThread):
                 self.log.emit(f"  ⚠ Bet Button model error: {e}")
                 button_model = None
 
-            manager = CoordsManager()
-            coords = manager.calculate_coords(self.layout, self.position, self.dual_monitor)
+            from core.capture.region_manager import RegionManager
+            manager = RegionManager()
+
+            # Get all regions for this position
+            monitor_name = "right" if self.dual_monitor else "primary"
+            regions = manager.get_all_regions_for_position(self.position, self.layout, monitor_name)
+
+            # Convert Region objects to dict format for compatibility
+            coords = {name: region.to_dict() for name, region in regions.items()}
 
             if not coords:
                 self.log.emit("❌ Failed to get coordinates")

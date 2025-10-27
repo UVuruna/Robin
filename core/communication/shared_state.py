@@ -14,7 +14,7 @@ This module provides:
 import logging
 import time
 from dataclasses import dataclass, field
-from multiprocessing import Manager
+from multiprocessing.managers import SyncManager
 from typing import Any, Dict, Optional
 
 from config.settings import GamePhase, BetState
@@ -123,7 +123,7 @@ class SharedGameState:
     - Performance statistics
     """
 
-    def __init__(self, manager: Optional[Manager] = None):
+    def __init__(self, manager: Optional[SyncManager] = None):
         """
         Initialize SharedGameState.
 
@@ -134,7 +134,7 @@ class SharedGameState:
 
         # Create or use provided manager
         if manager is None:
-            manager = Manager()
+            manager = SyncManager()
 
         # Shared memory dictionary
         # Key: bookmaker_name, Value: state dict
@@ -358,7 +358,7 @@ class SharedGameState:
 _shared_state_instance: Optional[SharedGameState] = None
 
 
-def get_shared_state(manager: Optional[Manager] = None) -> SharedGameState:
+def get_shared_state(manager: Optional[SyncManager] = None) -> SharedGameState:
     """
     Get or create singleton SharedGameState instance.
 

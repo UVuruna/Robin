@@ -1,455 +1,423 @@
-# PROJECT KNOWLEDGE INSTRUCTIONS
+# PROJECT KNOWLEDGE - AVIATOR System
 
-## FOR AI SESSIONS
-
-When starting a new Claude session for AVIATOR project development:
-
-### 1. ALWAYS LOAD THESE FILES ON START
-```
-1. CLAUDE.md          - Core technical principles
-2. ARCHITECTURE.md    - System structure
-3. STRUCTURE.md       - File organization
-4. Project Knowledge INSTRUCTIONS - This file
-5. Current module     - File you're working on
-6. Related modules    - Files that import or are imported by current
-```
-
-### 2. WORK COMPLETION WORKFLOW
-
-#### After completing ANY work:
-```python
-# 1. Update documentation
-UPDATE → CHANGELOG.md (add entry for changes)
-UPDATE → ARCHITECTURE.md (if structure changed)
-UPDATE → README.md (if functionality added)
-UPDATE → __init__.py (update exports in folder)
-
-# 2. Check dependency chain
-ANALYZE → Files that import this module
-ANALYZE → Files this module imports
-UPDATE → Any broken imports
-UPDATE → Any changed interfaces
-
-# 3. Example workflow
-If changed: core/ocr/engine.py
-Then check: → collectors/main_collector.py
-           → orchestration/shared_reader.py
-           → tests/test_ocr.py
-           → Update all if needed
-```
-
-### 3. ⚠️ CRITICAL DEVELOPMENT RULES
-
-#### 🚨 ABSOLUTE RULE #0 - ZABRANA LAGANJA
-
-**IMPERATIV: NIKADA NE LAŽ! NIKADA ne tvrdi da si uradio nešto što nisi!**
-
-❌ **APSOLUTNO ZABRANJENO:**
-- Reći "Proverio sam sve fajlove" kada NISAM
-- Reći "Ispravio sam greške" kada NISAM
-- Pretvarati se da znam kada NE ZNAM
-- Pretpostavljati umesto da pitam
-- Davati generic odgovore umesto konkretnih
-
-✅ **OBAVEZNO PONAŠANJE:**
-- Ako nisam prošao kroz fajlove → MORAM reći da NISAM
-- Ako nisam siguran → MORAM da pitam
-- Ako nešto nije jasno → MORAM da tražim pojašnjenje
-- Ako imam nedoumica → MORAM da kažem "Nisam siguran, trebam pomoć"
-- Ako je zadatak complex → MORAM predložiti podelu na mini-zadatke
-- Ako nešto ne može da se uradi → MORAM reći i tražiti alternativu
-
-**KONTROLNI MEHANIZAM:**
-- Kada kažem "Uradio sam X" → MORAM navesti tačne fajlove i line numbers
-- Kada kažem "Proverio sam X" → MORAM navesti konkretne probleme koje sam našao
-- Ako NE DAM konkretne podatke → To je DOKAZ da lažem
-- Ako dam generic odgovor → To je DOKAZ da nisam stvarno proverio
-
-**SVE MOŽEMO DA ISPRAVIMO, ALI IMPERATIV JE DA SE NE SME LAGATI!**
+## Purpose
+This file contains project-specific knowledge for AI assistants working on AVIATOR codebase.
 
 ---
 
-#### 🚫 VERSIONING ANTI-PATTERN - ABSOLUTE PROHIBITION
+## 🚨 FOR AI SESSIONS: MANDATORY READING ON START
 
-**IMPERATIV: NIKADA ne kreirati verzije fajlova ili klasa!**
-
-❌ **ZABRANJENO:**
-```python
-# NE SMEŠ OVO DA RADIŠ!
-my_module_v2.py
-my_module_v3.py
-MyClassV2
-MyClassRefactored
-my_module_new.py
-my_module_old.py
-my_module_backup.py
+### Required Files (Read in This Order):
+```
+1. CLAUDE.md - Core technical principles & patterns
+2. ARCHITECTURE.md - Detailed system design
+3. README.md - Project overview
+4. CHANGELOG.md - Recent changes history
+5. This file (project_knowledge.md) - Specific implementation details
 ```
 
-✅ **JEDINI ISPRAVAN NAČIN:**
-```python
-# DIREKTNO MENJAJ POSTOJEĆI FAJL!
-my_module.py  # <- Izmeni ovaj fajl direktno
-class MyClass  # <- Isti naziv, nova implementacija
-```
-
-**RAZLOG:**
-- Git automatski čuva istoriju svake izmene
-- Stare verzije zagađuju codebase i prave konfuziju
-- Import statements ostaju isti
-- Refactoring = ZAMENA postojećeg, ne dodavanje novog
-
-**PROCEDURA:**
-1. `git commit` pre refaktorisanja (backup u Git-u!)
-2. DIREKTNO izmeni postojeći fajl
-3. Testiraj izmene
-4. `git commit` sa opisom izmena
-
-**AKO NAPRAVIŠ GREŠKU:**
-- `git revert` ili `git checkout` da vratiš fajl
-- NEMOJ kreirati `_old` ili `_backup` verzije!
+### Critical: ASK QUESTIONS BEFORE CODING
+- **NEVER start implementing without clarifying ambiguities**
+- If ANY aspect is unclear → ASK first
+- If multiple approaches exist → ASK which to use
+- If requirements are missing → ASK for details
+- **Only after receiving clear answers → Proceed**
 
 ---
 
-#### 🚨 DELETING CODE - CRITICAL PROHIBITION
+## ⚠️ ABSOLUTE RULES (ZERO TOLERANCE)
 
-**IMPERATIV: NIKADA ne brišeš funkcionalnost bez 100% sigurnosti!**
+### RULE #0: NO LYING
+**You MUST provide concrete evidence for any claim.**
 
-❌ **SCENARIO (LOŠE):**
-```python
-# Vidiš: self.unknown_manager.do_something()
-# Misliš: "Ovo ne postoji, obrišem"
-# DELETE <-- FATALNA GREŠKA!
-```
+❌ Forbidden:
+- "I checked all files" → **List specific files with line numbers**
+- "I fixed errors" → **Show exact changes**
+- Generic answers without specifics
 
-✅ **OBAVEZNA PROCEDURA:**
-```
-1. STOP - Nemoj brisati odmah!
+✅ Required:
+- If unsure → ASK
+- If not verified → SAY SO
+- If complex → Propose breaking into sub-tasks
 
-2. ISTRAŽI:
-   Glob **/*unknown*.py
-   Glob **/*manager*.py
-   Grep "unknown_manager" (možda je uvezen sa drugim nazivom)
-   Grep "UnknownManager" (možda klasa postoji)
-
-3. PROVERI imports u fajlu
-
-4. AKO NE NAĐEŠ:
-   🔴 PITAJ KORISNIKA OBAVEZNO! 🔴
-
-   "Našao sam self.unknown_manager u kodu ali ne mogu
-    da nađem tu klasu. Da li:
-    - Je promenila naziv?
-    - Je premestena u drugi modul?
-    - Koja je njena uloga u sistemu?"
-
-5. TEK NAKON ODGOVORA - menjaj kod
-```
-
-**PRIMER IZ PROJEKTA (coords_manager):**
-```python
-# ❌ URAĐENO (LOŠE):
-self.coords_manager.calculate_coords(...)  # Obrisan jer ne postoji
-
-# ✅ TREBALO (DOBRO):
-# 1. Glob **/*coord*.py -> Našao RegionManager
-# 2. Razumeo: coords_manager = RegionManager (promenjen naziv)
-# 3. Dodao: self.region_manager = RegionManager()
-# 4. Koristio: self.region_manager.get_bookmaker_regions(...)
-# ILI
-# 1. Pitao: "Ne nalazim coords_manager. Šta to radi?"
-# 2. Dobio odgovor: "To je RegionManager sada"
-# 3. Ispravio kod
-```
-
-**PRAVILO:**
-🔴 **Brisanje core funkcije = Sistem ne radi**
-🟢 **Pitanje = 1 minut, sistem OK**
-
-**BOLJE 100 PITANJA NEGO 1 OBRISANA CORE FUNKCIJA!**
+**Control:** If you can't provide file:line references, you're lying.
 
 ---
 
-### 4. CORE PRINCIPLES TO REMEMBER
+### RULE #1: NO VERSION SUFFIXES
+❌ Never create: `module_v2.py`, `ClassV3`, `file_new.py`, `file_backup.py`
+✅ Always: Edit existing file directly (Git stores history)
 
-#### DATA ACCURACY > SPEED
-- Never sacrifice accuracy for performance
-- Validate all data before processing
-- Better to miss data than record wrong data
+**Procedure:**
+1. `git commit` before changes
+2. Edit existing file DIRECTLY
+3. Test
+4. `git commit` with clear message
 
-#### WORKER PROCESS PARALLELISM
-- ONE BOOKMAKER = ONE PROCESS = ONE CPU CORE
-- Each Worker has its OWN OCR reader
-- Parallel OCR execution (6 bookmakers = 100ms, not 600ms!)
-- Never sequential OCR reading
+---
 
-#### BATCH EVERYTHING
-- Never single database insert
-- Buffer 50-100 records minimum
-- Flush on interval or buffer full
+### RULE #2: NEVER DELETE WITHOUT VERIFICATION
 
-#### ATOMIC TRANSACTIONS
-- All betting operations must be atomic
-- Use TransactionController for GUI operations
-- Lock mechanism for every transaction
+Before deleting code:
+1. STOP - Don't delete immediately
+2. SEARCH - Glob/Grep for the class/function
+3. UNDERSTAND - Read what it does
+4. ASK USER if not found
 
-#### EVENT-DRIVEN ARCHITECTURE
-- All inter-process communication via EventBus
-- No direct process-to-process calls
-- Pub/Sub pattern for loose coupling
-
-### 3. WHEN CREATING NEW MODULES
-
-#### ALWAYS INCLUDE
+**Example from this project:**
 ```python
-"""
-Module: [name]
-Purpose: [clear description]
-Version: [x.x]
-"""
-
-import logging
-from typing import ...
-
-class YourClass:
-    def __init__(self):
-        self.logger = logging.getLogger(self.__class__.__name__)
-        # ... initialization
-        
-    def cleanup(self):
-        """Always implement cleanup"""
-        pass
-        
-    def get_stats(self):
-        """Always implement stats"""
-        return {}
+# ❌ WRONG: Delete self.coords_manager (couldn't find it)
+# ✅ RIGHT: Search → Found RegionManager (was renamed!)
+# ✅ RIGHT: Ask: "coords_manager not found. Was it renamed?"
 ```
 
-#### NEVER DO
-- Hard-code paths or coordinates
-- Use global variables without locks
-- Ignore error handling
-- Skip logging
-- Create tight coupling between modules
+**Rule:** 100 questions > 1 deleted core feature
 
-### 4. ADDING A NEW AGENT
+---
 
-Agents run as **threads inside Worker process** (not separate processes).
+## CORE ARCHITECTURAL PATTERNS
 
-#### Template Structure:
+### Pattern 1: Worker Process Parallelism
+
+**Principle:** 1 Bookmaker = 1 Process = 1 CPU Core
+
+```
+6 Bookmakers = 6 Processes = 100ms OCR (not 600ms sequential!)
+
+Main Process (GUI)
+└─> Spawns 6 Worker Processes (parallel on CPU cores)
+    Each Worker:
+    ├─ Own OCR Reader (parallel execution)
+    ├─ local_state dict (in-process, fast)
+    ├─ round_history list (100 rounds)
+    ├─ Collectors (MainCollector, RGBCollector)
+    └─ Agents as threads (BettingAgent, SessionKeeper)
+```
+
+**Why processes not threads?** Python GIL prevents true parallelism. OCR is CPU-intensive, so 6 threads = 600ms sequential. 6 processes = 100ms parallel.
+
+---
+
+### Pattern 2: Shared BatchWriter Per TYPE
+
+**Critical:** ONE writer per collector/agent TYPE, NOT per bookmaker!
+
 ```python
-"""
-Module: [AgentName]
-Purpose: [Clear description of agent's role]
-Version: 1.0
-"""
+# ❌ WRONG - Each worker has own writer
+Worker1 → BatchWriter1 → flush (inefficient)
+Worker2 → BatchWriter2 → flush
 
-import time
-import logging
-import threading
-from typing import Dict, Optional
-from collections import deque
+# ✅ CORRECT - All workers share ONE writer per TYPE
+main_writer = BatchDatabaseWriter('main.db', batch_size=100)
 
+Worker1 → main_writer.add() ┐
+Worker2 → main_writer.add() ├─> 100 records → ONE flush
+Worker3 → main_writer.add() ┘
+
+# Result: 50-100x faster batch operations
+```
+
+**Implementation:** [gui/app_controller.py:49-110](gui/app_controller.py)
+
+---
+
+### Pattern 3: Closure Pattern for Agent State Access
+
+**Problem:** Agents (threads) need access to Worker's `local_state`
+
+**Solution:** Pass closure functions, NOT shared memory
+
+```python
+# In orchestration/bookmaker_worker.py
+class BookmakerWorker:
+    def setup_agents(self):
+        # Closure captures self
+        def get_state_fn():
+            return self.local_state.copy()
+
+        # Pass to agent
+        self.betting_agent = BettingAgent(get_state_fn=get_state_fn)
+
+# In agents/betting_agent.py
+class BettingAgent:
+    def __init__(self, get_state_fn):
+        self.get_state = get_state_fn  # Store closure
+
+    def _do_work(self):
+        state = self.get_state()  # Call closure → instant access!
+```
+
+**Why?** In-process access (no multiprocessing overhead), thread-safe, fast.
+
+---
+
+### Pattern 4: Worker Process Initialization Flow
+
+```python
+1. GUI creates ProcessManager
+2. GUI registers worker with WorkerConfig
+   config = WorkerConfig(
+       name='Admiral',
+       target_func=worker_entry_point,
+       kwargs={'bookmaker_name': 'Admiral', 'db_writers': {...}}
+   )
+3. ProcessManager wraps with _worker_wrapper
+4. Wrapper INJECTS shutdown_event into kwargs
+5. worker_entry_point creates BookmakerWorker
+6. BookmakerWorker.run() starts OCR loop
+```
+
+**Key insight:** `shutdown_event` NOT in target_func signature - wrapper injects it!
+
+**Code:** [orchestration/process_manager.py:137-189](orchestration/process_manager.py)
+
+---
+
+## DATA FLOW: local_state vs SharedGameState
+
+```python
+# PRIMARY: local_state (in-process dict)
+Worker:
+    OCR → local_state → Collectors (read)
+                     → Agents (closure access)
+
+# OPTIONAL: SharedGameState (for GUI only)
+Worker:
+    local_state → Periodically copy to SharedGameState
+
+GUI:
+    SharedGameState → Read for stats display
+```
+
+**Key difference:**
+- `local_state`: Primary, fast in-process
+- `SharedGameState`: GUI monitoring only (slower)
+
+**Why both?** Workers avoid multiprocessing overhead. GUI gets monitoring data.
+
+---
+
+## ADDING NEW COMPONENTS
+
+### Adding a New Collector
+
+**Collectors run in Worker process, access local_state.**
+
+Steps:
+1. Extend `BaseCollector` ([collectors/base_collector.py](collectors/base_collector.py))
+2. Implement:
+   ```python
+   def collect(self, state: Dict) -> Optional[Dict]:
+       # Process state, return data or None
+
+   def validate(self, data: Dict) -> bool:
+       # Validate before DB write
+   ```
+3. Use shared `BatchWriter` (passed in constructor)
+4. Register in `BookmakerWorker.setup()` ([orchestration/bookmaker_worker.py](orchestration/bookmaker_worker.py))
+
+---
+
+### Adding a New Agent
+
+**Agents run as THREADS inside Worker process.**
+
+Template:
+```python
 class YourAgent:
-    """
-    Agent description.
-
-    Runtime: Thread inside Worker process
-    Dependencies: [List what it needs]
-    Exclusivity: [If conflicts with other agents]
-    """
-
-    def __init__(self, bookmaker: str, config: Dict):
+    def __init__(self, bookmaker: str, get_state_fn, config: Dict):
         self.bookmaker = bookmaker
-        self.config = config
-        self.logger = logging.getLogger(f"{self.__class__.__name__}-{bookmaker}")
-
-        # State
+        self.get_state = get_state_fn  # Closure
         self.running = False
         self.active = True  # Can be paused
 
-        # Stats
-        self.stats = {
-            'start_time': time.time(),
-            'actions_count': 0
-        }
-
     def run(self):
-        """Main agent loop - runs in thread."""
-        self.logger.info(f"Starting {self.__class__.__name__}")
+        """Main loop - runs in thread."""
         self.running = True
-
         while self.running:
-            try:
-                if self.active:
-                    # Agent logic here
-                    self._do_work()
-
-                time.sleep(1)  # Avoid busy loop
-
-            except KeyboardInterrupt:
-                break
-            except Exception as e:
-                self.logger.error(f"Error: {e}", exc_info=True)
-                time.sleep(5)
-
-        self.logger.info(f"{self.__class__.__name__} stopped")
-
-    def _do_work(self):
-        """Override this with agent-specific logic."""
-        pass
+            if self.active:
+                state = self.get_state()  # Access via closure
+                self._do_work(state)
+            time.sleep(1)
 
     def pause(self):
-        """Pause agent (e.g., when other agent is active)."""
         self.active = False
-        self.logger.info("Agent paused")
-
-    def resume(self):
-        """Resume agent."""
-        self.active = True
-        self.logger.info("Agent resumed")
 
     def stop(self):
-        """Stop agent gracefully."""
         self.running = False
-
-    def get_stats(self) -> Dict:
-        """Get agent statistics."""
-        uptime = time.time() - self.stats['start_time']
-        return {
-            **self.stats,
-            'uptime_seconds': uptime,
-            'status': 'active' if self.active else 'paused' if self.running else 'stopped'
-        }
-
-    def cleanup(self):
-        """Cleanup resources."""
-        self.logger.info(f"{self.__class__.__name__} cleanup")
 ```
 
-#### Integration Steps:
+Integration:
+1. Create `agents/your_agent.py`
+2. Add to `BookmakerWorker.setup_agents()`
+3. Start as thread: `threading.Thread(target=agent.run, daemon=False)`
 
-1. **Create agent file** in `agents/your_agent.py`
-2. **Add to Worker Process** in `orchestration/bookmaker_worker.py`:
-   ```python
-   self.your_agent = YourAgent(bookmaker, config)
-   self.agent_thread = threading.Thread(
-       target=self.your_agent.run,
-       daemon=False
-   )
-   self.agent_thread.start()
-   ```
-3. **Add GUI tab** in `main.py` (if needed)
-4. **Update CHANGELOG.md**
-
-#### Agent Communication:
-
-**Access Worker's local_state:**
+**Communication between agents:**
 ```python
-# In Worker Process:
-class BookmakerWorkerProcess:
-    def start_agents(self):
-        self.betting_agent = BettingAgent(
-            get_state_fn=lambda: self.local_state,  # Closure!
-            get_history_fn=lambda: list(self.round_history)
-        )
-
-# In BettingAgent:
-class BettingAgent:
-    def __init__(self, get_state_fn, get_history_fn):
-        self.get_state = get_state_fn
-        self.get_history = get_history_fn
-
-    def _do_work(self):
-        state = self.get_state()  # Reads Worker's local_state
-        history = self.get_history()  # Reads Worker's round_history
-```
-
-**Mutual Exclusivity (e.g., BettingAgent vs SessionKeeper):**
-```python
-# When BettingAgent starts:
+# Mutual exclusivity (e.g., BettingAgent vs SessionKeeper)
 def start_betting(self):
-    self.session_keeper.pause()  # Pause SessionKeeper
+    self.session_keeper.pause()  # Pause other agent
     self.betting_agent.resume()
-
-# When SessionKeeper starts:
-def start_session_keeping(self):
-    self.betting_agent.pause()  # Pause BettingAgent
-    self.session_keeper.resume()
 ```
 
-### 5. TESTING REQUIREMENTS
+---
 
-Before considering any module complete:
-1. Unit tests for all public methods
+## PERFORMANCE REQUIREMENTS
+
+| Metric | Target | Critical |
+|--------|--------|----------|
+| OCR Speed | < 15ms | ✅ YES |
+| Batch Write | > 5000 records/sec | ✅ YES |
+| Memory/Worker | < 100MB | ⚠️ Monitor |
+| CPU/Worker | < 10% idle | ⚠️ Adjust intervals |
+
+**Priority:** Data Accuracy > Speed
+
+---
+
+## WORKFLOW CHECKLIST
+
+### After Completing ANY Work:
+
+#### 1. Update Documentation
+- [ ] `CHANGELOG.md` - **MUST** add entry
+- [ ] `ARCHITECTURE.md` - If structure changed
+- [ ] `README.md` - If functionality added
+- [ ] `__init__.py` - Update exports if needed
+
+#### 2. Check Dependency Chain
+```python
+# Example: If changed core/ocr/engine.py
+Check → collectors/* (uses OCR)
+Check → orchestration/bookmaker_worker.py (uses OCR)
+Check → tests/test_ocr.py (tests OCR)
+```
+
+#### 3. Verify Performance
+- OCR changes → Run `tests/ocr_performance.py`
+- ML changes → Run `tests/ml_phase_performance.py`
+- Database changes → Check write speed
+
+---
+
+## CRITICAL MODULE DEPENDENCIES
+
+### Core Files to Understand Together
+
+**Worker Implementation:**
+- [orchestration/bookmaker_worker.py](orchestration/bookmaker_worker.py) - Primary worker
+- [orchestration/process_manager.py](orchestration/process_manager.py) - Lifecycle management
+
+**Communication:**
+- [core/communication/event_bus.py](core/communication/event_bus.py) - Process-safe pub/sub
+- [core/communication/shared_state.py](core/communication/shared_state.py) - Optional shared memory
+
+**Database:**
+- [data_layer/database/batch_writer.py](data_layer/database/batch_writer.py) - Buffered writes
+
+**Agents:**
+- [agents/betting_agent.py](agents/betting_agent.py) - Closure pattern consumer
+- [agents/session_keeper.py](agents/session_keeper.py) - Closure pattern consumer
+- [agents/strategy_executor.py](agents/strategy_executor.py) - Stateless decision engine
+
+**Collectors:**
+- [collectors/base_collector.py](collectors/base_collector.py) - Abstract base
+- [collectors/main_collector.py](collectors/main_collector.py) - Round tracking
+- [collectors/rgb_collector.py](collectors/rgb_collector.py) - ML training data
+- [collectors/phase_collector.py](collectors/phase_collector.py) - Phase transitions
+
+---
+
+## COMMON IMPORT PATTERNS
+
+**Frequently imported in 5+ files:**
+- `BatchDatabaseWriter` - AppController, BookmakerWorker, all Collectors, BettingAgent
+- `EventPublisher/Subscriber` - BookmakerWorker, Collectors, Agents, AppController
+- `GamePhase enum` - BookmakerWorker, Collectors, Agents, shared_state
+
+---
+
+## TESTING REQUIREMENTS
+
+### Before Considering Module Complete:
+1. Unit tests for public methods
 2. Integration test with related modules
-3. Performance benchmark
-4. Memory leak check
+3. Performance benchmark (meet targets)
+4. Memory leak check (psutil)
 5. Error recovery test
 
-### 5. DOCUMENTATION STANDARDS
+---
 
-Every function must have:
-```python
-def function_name(param1: Type, param2: Type) -> ReturnType:
-    """
-    Brief description.
-    
-    Args:
-        param1: Description
-        param2: Description
-        
-    Returns:
-        Description of return value
-        
-    Raises:
-        ExceptionType: When this happens
-    """
+## DEBUGGING COMMANDS
+
+```bash
+# OCR speed benchmark (must be < 15ms)
+python tests/ocr_performance.py
+
+# ML model speed
+python tests/ml_phase_performance.py
+
+# Profile code
+python -m cProfile -o output.prof main.py
+
+# Test single worker
+python -m orchestration.bookmaker_worker
+
+# Region setup and debugging
+python utils/region_editor.py        # Interactive setup
+python utils/region_visualizer.py    # Visual debug
+python utils/diagnostic.py           # System validation (8 steps)
 ```
 
-### 6. PERFORMANCE TARGETS
+---
 
-Critical operations must meet:
-- OCR: < 15ms per read
-- Database batch write: > 5000 records/sec
-- Event processing: < 10ms
-- Memory per worker: < 100MB
+## NO-GO ZONES
 
-### 7. GIT WORKFLOW
+### ❌ NEVER
+- Single database inserts (always batch)
+- Sequential OCR (must be parallel!)
+- Direct process communication (use EventBus for GUI)
+- Block main GUI thread with I/O
+- Hardcode coordinates/paths
+- Global state without locks
+- Skip error handling
+- Read from DB inside Workers (INSERT only!)
 
-Commit messages format:
-```
-[TYPE] Brief description
+### ❌ DON'T CHANGE WITHOUT DISCUSSION
+- Worker Process per Bookmaker architecture
+- Shared BatchWriter per TYPE pattern
+- EventBus communication
+- Closure pattern for agent state access
+- TransactionController atomicity
 
-Detailed explanation if needed
+---
 
-- Bullet point 1
-- Bullet point 2
-```
+## PRIORITY HIERARCHY
 
-Types: FEATURE, FIX, REFACTOR, PERF, DOCS, TEST
-
-### 8. PRIORITY HIERARCHY
-
-When making decisions, prioritize in this order:
+When making decisions:
 1. **Data Accuracy** - Never compromise
 2. **System Stability** - Must run 24/7
 3. **Performance** - Meet targets
 4. **Features** - Add incrementally
 5. **UI/UX** - Polish last
 
-### 9. QUESTIONS TO ASK
+---
 
-Before implementing anything:
-1. Does this follow Worker Process per Bookmaker pattern (parallel)?
+## QUESTIONS TO ASK YOURSELF
+
+Before implementing:
+1. Does this follow Worker Process per Bookmaker pattern?
 2. Am I using batch operations for database?
-3. Is this loosely coupled (EventBus for GUI, direct for workers)?
+3. Is this loosely coupled (EventBus for GUI, closures for agents)?
 4. Have I handled all error cases?
 5. Will this scale to 6+ bookmakers?
 6. Am I using local_state (fast) or SharedGameState (GUI only)?
 
-### 10. RED FLAGS TO AVOID
+---
 
-Stop immediately if you find yourself:
+## RED FLAGS TO STOP AND ASK
+
+Stop immediately if:
 - Writing sequential OCR code (must be parallel!)
 - Doing single database inserts (must batch!)
 - Reading from database in Workers (only INSERT!)
@@ -458,33 +426,14 @@ Stop immediately if you find yourself:
 - Skipping error handling
 - Not writing tests
 
-## FOR HUMAN DEVELOPERS
+---
 
-When reviewing code or planning features:
+## REMEMBER
 
-### ASK THESE QUESTIONS
-1. Is the architecture consistent with ARCHITECTURE.md?
-2. Are core principles from CLAUDE.md followed?
-3. Is the code testable and maintainable?
-4. Will this work at scale (6+ bookmakers)?
-5. Is error recovery implemented?
-
-### CHECK THESE ITEMS
-- [ ] Follows Worker Process per Bookmaker pattern (parallel OCR)
-- [ ] Uses batch database operations (no single inserts)
-- [ ] Uses local_state primarily, SharedGameState only for GUI
-- [ ] Communicates via EventBus for GUI updates
-- [ ] Has proper error handling
-- [ ] Includes cleanup methods
-- [ ] Has statistics tracking
-- [ ] Documented properly
-- [ ] Has unit tests
-
-### REMEMBER
-This is a long-term project focused on:
+This is a **long-term project** focused on:
 - **Reliability over features**
-- **Data quality over quantity**  
+- **Data quality over quantity**
 - **Maintainability over cleverness**
 - **Safety over aggressive profit**
 
-The goal is a system that runs 24/7 with minimal intervention, collecting accurate data and executing safe betting strategies.
+Goal: System runs 24/7 with minimal intervention, collecting accurate data.

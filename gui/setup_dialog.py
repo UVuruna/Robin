@@ -1,5 +1,5 @@
 # gui/setup_dialog.py
-# VERSION: 1.0
+# VERSION: 2.0 - Refactored to use RegionManager (v4.0 architecture)
 # PURPOSE: Setup configuration dialog
 
 from PySide6.QtWidgets import (
@@ -17,7 +17,11 @@ from PySide6.QtWidgets import (
     QListWidget,
     QDoubleSpinBox,
 )
-from typing import Dict
+from typing import Dict, List
+import json
+from pathlib import Path
+from core.capture.region_manager import RegionManager
+from config.settings import PATH as CONFIG_PATH
 
 class SetupDialog(QDialog):
     """
@@ -34,7 +38,7 @@ class SetupDialog(QDialog):
         super().__init__(parent)
 
         self.config = config or {}
-        self.coords_manager = CoordsManager()
+        self.region_manager = RegionManager()
 
         self.setWindowTitle("⚙️ Setup Configuration")
         self.setMinimumWidth(600)
@@ -122,11 +126,11 @@ class SetupDialog(QDialog):
         config_layout = QFormLayout()
 
         self.bookmaker_combo = QComboBox()
-        self.bookmaker_combo.addItems(self.coords_manager.get_available_bookmakers())
+        self.bookmaker_combo.addItems(self._get_available_bookmakers())
         config_layout.addRow("Bookmaker:", self.bookmaker_combo)
 
         self.position_combo = QComboBox()
-        self.position_combo.addItems(self.coords_manager.get_available_positions())
+        self.position_combo.addItems(self._get_all_positions())
         config_layout.addRow("Position:", self.position_combo)
 
         layout.addLayout(config_layout)
@@ -202,6 +206,23 @@ class SetupDialog(QDialog):
         """Update bookmaker list based on number selected."""
         # This could auto-adjust the list size if needed
         pass
+
+    def _get_available_bookmakers(self) -> List[str]:
+        """Get available bookmakers from configuration file."""
+        try:
+            with open(CONFIG_PATH.bookmaker_config, "r") as f:
+                data = json.load(f)
+            bookmakers_set = set()
+            for group in data.get("server_groups", []):
+                bookmakers_set.update(group.get("bookmakers", []))
+            return sorted(list(bookmakers_set))
+        except:
+            return ["BalkanBet", "Mozzart", "Admiral", "MaxBet", "Meridian", "Soccer"]
+
+    def _get_all_positions(self) -> List[str]:
+        """Get all available positions from all layouts."""
+        # Combine all layout positions (layout_8 has all positions)
+        return self.region_manager.LAYOUT_8_POSITIONS.copy()
 
     def load_from_config(self):
         """Load values from existing config."""

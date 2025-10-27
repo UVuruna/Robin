@@ -1,5 +1,5 @@
 # gui/tools_tab.py
-# VERSION: 6.0 - ULTRA COMPACT + Named Bookmaker Presets
+# VERSION: 7.0 - Refactored to use RegionManager (v4.0 architecture)
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QGroupBox,
@@ -7,17 +7,21 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
-from typing import Dict
+from typing import Dict, List
 import json
 from config.settings import PATH
+from core.capture.region_manager import RegionManager
 
 class ToolsTab(QWidget):
     """Tools tab - ULTRA COMPACT version with collapsible sections."""
 
+    # Available layouts
+    AVAILABLE_LAYOUTS = ["layout_4", "layout_6", "layout_8"]
+
     def __init__(self, config: Dict = None):
         super().__init__()
         self.config = config or {}
-        self.coords_manager = CoordsManager()
+        self.region_manager = RegionManager()
         self.bookmaker_checkboxes = {}
         self.bookmaker_grid = None
         self.bookmaker_grid_widget = None
@@ -72,9 +76,7 @@ class ToolsTab(QWidget):
         row1 = QHBoxLayout()
         row1.addWidget(QLabel("Layout:"))
         self.layout_combo = QComboBox()
-        layouts = self.coords_manager.get_available_layouts()
-        if layouts:
-            self.layout_combo.addItems(layouts)
+        self.layout_combo.addItems(self.AVAILABLE_LAYOUTS)
         self.layout_combo.currentTextChanged.connect(self.on_layout_changed)
         row1.addWidget(self.layout_combo, 1)
 
@@ -121,9 +123,9 @@ class ToolsTab(QWidget):
         if not layout:
             return
 
-        # Update positions
+        # Update positions based on layout
         self.position_combo.clear()
-        positions = self.coords_manager.get_positions_for_layout(layout)
+        positions = self._get_positions_for_layout(layout)
         if positions:
             self.position_combo.addItems(positions)
         self.position_combo.addItem("ALL")
@@ -134,6 +136,16 @@ class ToolsTab(QWidget):
 
         # Update presets
         self.update_preset_combo()
+
+    def _get_positions_for_layout(self, layout: str) -> List[str]:
+        """Get position names for a given layout."""
+        if layout == "layout_4":
+            return self.region_manager.LAYOUT_4_POSITIONS.copy()
+        elif layout == "layout_6":
+            return self.region_manager.LAYOUT_6_POSITIONS.copy()
+        elif layout == "layout_8":
+            return self.region_manager.LAYOUT_8_POSITIONS.copy()
+        return []
 
     def update_bookmaker_grid(self):
         if self.bookmaker_grid is None:
@@ -158,7 +170,7 @@ class ToolsTab(QWidget):
         rows = 2
         cols = num_positions // 2
 
-        positions = self.coords_manager.get_positions_for_layout(layout_name)
+        positions = self._get_positions_for_layout(layout_name)
         if not positions:
             positions = [""] * num_positions
 

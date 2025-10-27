@@ -1,7 +1,7 @@
 # utils/quick_test.py
-# VERSION: 1.0
+# VERSION: 2.0 - Refactored to use RegionManager (v4.0 architecture)
 # PURPOSE: Quick system test for coordinate system
-# Tests: JSON format, CoordsManager, coordinate calculation
+# Tests: JSON format, RegionManager, coordinate calculation
 
 import sys
 from pathlib import Path
@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import json
 from config.settings import PATH
+from core.capture.region_manager import RegionManager
 
 
 def test_json_format():
@@ -54,37 +55,42 @@ def test_json_format():
         return False
 
 
-def test_coords_manager():
-    """Test CoordsManager functionality."""
+def test_region_manager():
+    """Test RegionManager functionality."""
     print("\n" + "=" * 70)
-    print("TEST 2: COORDS MANAGER")
+    print("TEST 2: REGION MANAGER")
     print("=" * 70)
 
     try:
-        manager = CoordsManager()
+        manager = RegionManager()
 
-        # Test get_available_positions
-        positions = manager.get_available_positions()
-        print(f"✅ Available positions: {positions}")
+        # Test monitor detection
+        monitors = manager.monitors
+        print(f"✅ Detected monitors: {len(monitors)}")
+        for mon in monitors:
+            print(f"   {mon}")
 
-        if not positions:
-            print("⚠️  WARNING: No positions configured!")
-            print("   Add positions to screen_regions.json")
+        # Test layout positions
+        print(f"✅ Layout 4 positions: {manager.LAYOUT_4_POSITIONS}")
+        print(f"✅ Layout 6 positions: {manager.LAYOUT_6_POSITIONS}")
+        print(f"✅ Layout 8 positions: {manager.LAYOUT_8_POSITIONS}")
 
-        # Test get_available_bookmakers
-        bookmakers = manager.get_available_bookmakers()
-        print(f"✅ Available bookmakers: {bookmakers}")
+        # Test regions configured
+        regions = manager.config.get("regions", {})
+        print(f"✅ Configured regions: {len(regions)}")
 
-        if not bookmakers:
-            print("⚠️  WARNING: No bookmakers configured!")
-            print("   Run: python utils/region_editor.py")
+        if not regions:
+            print("⚠️  WARNING: No regions configured!")
+            print("   Add regions to screen_regions.json")
             return False
 
         return True
 
     except Exception as e:
-        print("❌ FAIL: CoordsManager error!")
+        print("❌ FAIL: RegionManager error!")
         print(f"   Error: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 
@@ -95,54 +101,31 @@ def test_coordinate_calculation():
     print("=" * 70)
 
     try:
-        manager = CoordsManager()
+        manager = RegionManager()
 
-        bookmakers = manager.get_available_bookmakers()
-        positions = manager.get_available_positions()
+        # Test layout offset calculation
+        test_layout = "layout_6"
+        test_position = "TC"
 
-        if not bookmakers or not positions:
-            print("⚠️  SKIP: No bookmakers or positions to test")
-            return True
+        print(f"\nTesting: {test_layout} @ {test_position}")
 
-        # Test first bookmaker + first position
-        test_bookmaker = bookmakers[0]
-        test_position = positions[0]
+        offsets = manager.calculate_layout_offsets(test_layout, "primary")
+        print(f"✅ Calculated offsets for {test_layout}:")
+        for pos, (x, y) in offsets.items():
+            print(f"   {pos:3s} → ({x:5d}, {y:5d})")
 
-        print(f"\nTesting: {test_bookmaker} @ {test_position}")
+        # Test region retrieval
+        region = manager.get_region("score_region_small", test_position, test_layout)
+        print(f"\n✅ Retrieved region: {region}")
 
-        coords = manager.calculate_coords(test_bookmaker, test_position)
-
-        if coords is None:
-            print("❌ FAIL: Coordinate calculation returned None!")
-            return False
-
-        # Check required regions
-        required_regions = [
-            "score_region",
-            "my_money_region",
-            "other_count_region",
-            "other_money_region",
-            "phase_region",
-        ]
-
-        missing = []
-        for region in required_regions:
-            if region not in coords:
-                missing.append(region)
-
-        if missing:
-            print(f"❌ FAIL: Missing required regions: {missing}")
-            return False
-
-        print("✅ PASS: All required regions present")
+        # Test all regions for position
+        all_regions = manager.get_all_regions_for_position(test_position, test_layout)
+        print(f"\n✅ Retrieved {len(all_regions)} regions for position {test_position}")
 
         # Display sample coordinates
-        print("\nSample calculated coordinates:")
-        for region_name in required_regions[:3]:
-            region = coords[region_name]
-            print(
-                f"  {region_name:20s} → ({region['left']:4d}, {region['top']:4d}, {region['width']:4d}x{region['height']:3d})"
-            )
+        print("\nSample calculated regions:")
+        for region_name, region_obj in list(all_regions.items())[:3]:
+            print(f"  {region_name:30s} → ({region_obj.left:5d}, {region_obj.top:5d}, {region_obj.width:4d}x{region_obj.height:3d})")
 
         return True
 
@@ -156,42 +139,36 @@ def test_coordinate_calculation():
 
 
 def test_all_combinations():
-    """Test all bookmaker + position combinations."""
+    """Test all layout x position combinations."""
     print("\n" + "=" * 70)
-    print("TEST 4: ALL COMBINATIONS")
+    print("TEST 4: ALL LAYOUT/POSITION COMBINATIONS")
     print("=" * 70)
 
     try:
-        manager = CoordsManager()
+        manager = RegionManager()
 
-        bookmakers = manager.get_available_bookmakers()
-        positions = manager.get_available_positions()
+        layouts = ["layout_4", "layout_6", "layout_8"]
+        test_results = []
 
-        if not bookmakers or not positions:
-            print("⚠️  SKIP: No bookmakers or positions to test")
-            return True
+        for layout in layouts:
+            offsets = manager.calculate_layout_offsets(layout, "primary")
 
-        total_tests = len(bookmakers) * len(positions)
-        passed = 0
-        failed = 0
+            print(f"\n{layout}:")
+            for position in offsets.keys():
+                try:
+                    region = manager.get_region("score_region_small", position, layout)
+                    print(f"  ✅ {position:3s} → Region at ({region.left}, {region.top})")
+                    test_results.append(True)
+                except Exception as e:
+                    print(f"  ❌ {position:3s} → Failed: {e}")
+                    test_results.append(False)
 
-        print(f"\nTesting {total_tests} combinations...")
+        passed = sum(test_results)
+        total = len(test_results)
+        print(f"\nResults: {passed}/{total} passed")
 
-        for bookmaker in bookmakers:
-            for position in positions:
-                coords = manager.calculate_coords(bookmaker, position)
-
-                if coords and "score_region" in coords:
-                    passed += 1
-                    print(f"  ✅ {bookmaker:15s} @ {position:3s}")
-                else:
-                    failed += 1
-                    print(f"  ❌ {bookmaker:15s} @ {position:3s} FAILED")
-
-        print(f"\nResults: {passed}/{total_tests} passed")
-
-        if failed > 0:
-            print(f"❌ FAIL: {failed} combinations failed!")
+        if passed < total:
+            print(f"❌ FAIL: {total - passed} combinations failed!")
             return False
 
         print("✅ PASS: All combinations work!")
@@ -200,6 +177,8 @@ def test_all_combinations():
     except Exception as e:
         print("❌ FAIL: Error testing combinations!")
         print(f"   Error: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 
@@ -213,7 +192,7 @@ def main():
 
     # Run tests
     results.append(("JSON Format", test_json_format()))
-    results.append(("CoordsManager", test_coords_manager()))
+    results.append(("RegionManager", test_region_manager()))
     results.append(("Coordinate Calculation", test_coordinate_calculation()))
     results.append(("All Combinations", test_all_combinations()))
 

@@ -1,6 +1,7 @@
 # utils/region_visualizer.py
-# VERSION: 9.0 - FIXED: Middle mouse button + JSON colors matching
+# VERSION: 10.0 - Refactored to use RegionManager (v4.0 architecture)
 # IMPROVEMENTS:
+# - Uses RegionManager for coordinate calculation
 # - Reads colors from screen_regions.json (same as editor)
 # - Middle button works via mousePressEvent
 # - Space key as fallback for fit
@@ -29,9 +30,10 @@ import cv2
 import mss
 from datetime import datetime
 import json
+from core.capture.region_manager import RegionManager
 
 class RegionVisualizerDialog(QDialog):
-    """Region Visualizer v9.0 - colors from JSON, fixed middle button."""
+    """Region Visualizer v10.0 - uses RegionManager."""
 
     def __init__(self, layout: str, position: str, dual_monitor: bool, parent=None):
         super().__init__(parent)
@@ -39,7 +41,7 @@ class RegionVisualizerDialog(QDialog):
         self.layout = layout
         self.position = position
         self.dual_monitor = dual_monitor
-        self.coords_manager = CoordsManager()
+        self.region_manager = RegionManager()
         self.region_colors = {}
 
         self.current_image = None
@@ -264,11 +266,14 @@ class RegionVisualizerDialog(QDialog):
     def capture_single_position(self) -> np.ndarray:
         """Capture single position with regions."""
         try:
-            position_offset = self.coords_manager.get_position_offset(
-                self.layout, self.position
-            )
-            if not position_offset:
+            # Get offset using RegionManager
+            monitor_name = "right" if self.dual_monitor else "primary"
+            offsets = self.region_manager.calculate_layout_offsets(self.layout, monitor_name)
+
+            if self.position not in offsets:
                 return None
+
+            offset_x, offset_y = offsets[self.position]
 
             if "layout_4" in self.layout:
                 width, height = 1920, 1044
@@ -279,20 +284,14 @@ class RegionVisualizerDialog(QDialog):
             else:
                 width, height = 1280, 1044
 
-            left = position_offset["left"]
-            top = position_offset["top"]
-
-            if self.dual_monitor:
-                left += 3840
-
             with mss.mss() as sct:
-                monitor = {"left": left, "top": top, "width": width, "height": height}
+                monitor = {"left": offset_x, "top": offset_y, "width": width, "height": height}
                 screenshot = sct.grab(monitor)
                 img = np.array(screenshot)
                 img = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
 
             # Draw regions using JSON colors
-            regions = self.coords_manager.get_all_regions()
+            regions = self.region_manager.config.get("regions", {})
             if regions:
                 for region_name, region_coords in regions.items():
                     if region_name in self.region_colors:
@@ -319,19 +318,15 @@ class RegionVisualizerDialog(QDialog):
     def capture_all_positions(self) -> np.ndarray:
         """Capture all positions in grid layout."""
         try:
-            left, top = 0, 0
-
-            if "layout_4" in self.layout:
-                width, height = 3840, 2088
-            elif "layout_6" in self.layout:
-                width, height = 3840, 2088
-            elif "layout_8" in self.layout:
-                width, height = 3840, 2088
+            # Determine monitor to capture
+            monitor_setup = self.region_manager.get_monitor_setup()
+            if self.dual_monitor and "right" in monitor_setup:
+                target_monitor = monitor_setup["right"]
             else:
-                width, height = 3840, 2088
+                target_monitor = list(monitor_setup.values())[0]
 
-            if self.dual_monitor:
-                left += 3840
+            left, top = target_monitor.x, target_monitor.y
+            width, height = target_monitor.width, target_monitor.height
 
             with mss.mss() as sct:
                 monitor = {"left": left, "top": top, "width": width, "height": height}
@@ -340,22 +335,17 @@ class RegionVisualizerDialog(QDialog):
                 img = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
 
             # Draw regions for ALL positions
-            regions = self.coords_manager.get_all_regions()
-            positions = self.coords_manager.get_positions_for_layout(self.layout)
+            regions = self.region_manager.config.get("regions", {})
+            monitor_name = "right" if self.dual_monitor else "primary"
+            offsets = self.region_manager.calculate_layout_offsets(self.layout, monitor_name)
 
-            for position_code in positions:
-                position_offset = self.coords_manager.get_position_offset(
-                    self.layout, position_code
-                )
-                if position_offset and regions:
-                    offset_left = position_offset["left"]
-                    offset_top = position_offset["top"]
-
+            for position_code, (offset_x, offset_y) in offsets.items():
+                if regions:
                     for region_name, region_coords in regions.items():
                         if region_name in self.region_colors:
                             abs_coords = {
-                                "left": region_coords["left"] + offset_left,
-                                "top": region_coords["top"] + offset_top,
+                                "left": region_coords["left"] + offset_x - left,
+                                "top": region_coords["top"] + offset_y - top,
                                 "width": region_coords["width"],
                                 "height": region_coords["height"],
                             }

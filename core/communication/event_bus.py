@@ -8,6 +8,7 @@ import time
 import threading
 import multiprocessing as mp
 from multiprocessing import Process
+from multiprocessing.managers import SyncManager
 from typing import Dict, Any, Callable, List, Optional
 from dataclasses import dataclass, field
 from enum import Enum
@@ -105,7 +106,7 @@ class EventBus:
             self.initialized = True
             
             # Multiprocessing components
-            self.manager = Manager()
+            self.manager = SyncManager()
             self.event_queue = self.manager.Queue()
             self.subscribers = self.manager.dict()  # {event_type: [subscriber_ids]}
             self.callbacks = {}  # Local callbacks (not shared between processes)

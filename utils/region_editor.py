@@ -148,18 +148,21 @@ class RegionEditorDialog(QDialog):
             }
 
     def _get_position_offset(self):
-        """Get position offset from CoordsManager."""
+        """Get position offset from RegionManager."""
         try:
+            from core.capture.region_manager import RegionManager
 
-            manager = CoordsManager()
-            self.position_offset = manager.get_position_offset(
-                self.layout, self.position
-            )
+            manager = RegionManager()
+            monitor_name = "right" if self.dual_monitor else "primary"
+            offsets = manager.calculate_layout_offsets(self.layout, monitor_name)
 
-            if not self.position_offset:
+            if self.position not in offsets:
                 raise ValueError(
                     f"Position {self.position} not found in layout {self.layout}"
                 )
+
+            offset_x, offset_y = offsets[self.position]
+            self.position_offset = {"left": offset_x, "top": offset_y}
 
             if "layout_4" in self.layout:
                 self.preview_width, self.preview_height = 1920, 1044
