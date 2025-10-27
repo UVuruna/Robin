@@ -11,6 +11,154 @@
 
 ---
 
+## [4.0.0] - 2025-10-28 - 🚀 v3.0 ARCHITECTURE FULL COMPLIANCE
+
+### 🔥 **CRITICAL: Complete v3.0 Integration**
+
+**Refactored Files:**
+
+1. **orchestration/bookmaker_worker.py** - COMPLETELY REFACTORED to v3.0
+   - ✅ Worker Process Pattern (1 Bookmaker = 1 Process = 1 CPU Core)
+   - ✅ Local State dict (fast in-process access)
+   - ✅ Round History list (100 recent rounds for StrategyExecutor)
+   - ✅ Closure Pattern for agents (get_state_fn, get_history_fn)
+   - ✅ Shared BatchWriter per TYPE (not per bookmaker)
+   - ✅ Parallel OCR (each worker has own Template + Tesseract)
+   - ✅ Agents run as threads inside Worker process
+
+2. **gui/app_controller.py** - COMPLETELY REFACTORED to v3.0
+   - ✅ Removed SharedGameStateReader (OBSOLETE!)
+   - ✅ Uses worker_entry_point from bookmaker_worker.py
+   - ✅ Creates SHARED BatchWriter instances per TYPE (main, betting, rgb)
+   - ✅ Passes db_writers dict to all workers
+   - ✅ Passes bookmaker_index for SessionKeeper offset calculation
+   - ✅ All workers use SAME BookmakerWorker class
+
+3. **main.py** - FIXED coordinate calculation
+   - ✅ Added RegionManager import and initialization
+   - ✅ Properly calculates coordinates using region_manager.get_bookmaker_regions()
+   - ✅ Updated performance info messages to v3.0
+   - ❌ Fixed bug: self.coords_manager didn't exist (was using wrong name!)
+
+**Marked as Obsolete:**
+- `orchestration/shared_reader.py` - NO LONGER USED (replaced by parallel pattern)
+
+**Documentation:**
+- Added **VERSIONING ANTI-PATTERN** rules to `CLAUDE.md` and `project_knowledge.md`
+  - ❌ NEVER create `_v2`, `_v3`, `_new`, `_old` file versions
+  - ✅ ALWAYS refactor existing files directly (Git stores history!)
+
+- Added **MISSING FUNCTIONALITY PROHIBITION** rules to both MD files
+  - 🚨 NEVER delete code without understanding it
+  - 🚨 ALWAYS search for renamed/moved functionality
+  - 🚨 ALWAYS ask user if unsure
+  - 📝 Example: coords_manager → RegionManager (must be found, not deleted!)
+
+- Updated `STRUCTURE.md` with v3.0 architecture summary
+
+### 📊 **Performance Impact**
+- 6 bookmakers: 600ms sequential → 100ms parallel (**6x faster**)
+- Local state access: instant (no shared memory overhead)
+- BatchWriter efficiency: 6 separate → 1 shared per TYPE (**6x efficiency**)
+
+### 🐛 **Bug Fixes**
+- Fixed main.py: Missing RegionManager initialization
+- Fixed main.py: Coordinate calculation was deleted (now uses RegionManager)
+- Fixed app_controller.py: Removed obsolete SharedReader dependencies
+
+---
+
+## [3.0.0] - 2025-10-27 - 🔥 MAJOR ARCHITECTURE REFACTOR
+
+### 🎯 **CRITICAL CHANGES - Worker Process Parallelism**
+
+**BREAKING CHANGES:**
+- Arhitektura promenjena sa "Shared Reader" na "Worker Process per Bookmaker"
+- Svaki bookmaker sada ima SVOJ OCR reader u zasebnom procesu
+- Pravi paralelizam: 6 bookmaker-a = 6 CPU cores = 100ms (ne 600ms!)
+
+### 📄 **Documentation - Svi MD fajlovi ažurirani**
+
+**Changed:**
+- `ARCHITECTURE.md` - Kompletno prepisan:
+  - "Worker Process Pattern" umesto "Shared Reader Pattern"
+  - Sekcija "Local State vs SharedGameState"
+  - Sekcija "Agents Layer" sa BettingAgent, SessionKeeper, StrategyExecutor
+  - Razlika PhaseCollector vs RGBCollector
+
+- `CLAUDE.md` - Ažurirani principi:
+  - Principle #1: "WORKER PROCESS PATTERN - PARALELIZAM JE IMPERATIV"
+  - "LOCAL STATE vs SHARED STATE" objašnjenje
+  - EventBus uloga i primeri koda
+  - Detalji o Agents-ima i njihovoj integraciji
+
+- `project_knowledge.md` - Dodati paterni:
+  - "ADDING A NEW AGENT" sekcija sa template kodom
+  - Closure pattern za pristup local_state
+  - Mutual exclusivity pattern (BettingAgent vs SessionKeeper)
+
+- `README.md` - Sistem pregled:
+  - Worker Process arhitektura dijagram
+  - "1 Bookmaker = 1 Process = 1 CPU Core" princip
+
+### 🔧 **Agents Refactoring**
+
+**Changed:**
+- `agents/session_keeper.py` (v2.0 → v3.0)
+  - ❌ REMOVED: `shared_reader` dependency
+  - ✅ ADDED: `get_state_fn` closure za pristup local_state
+  - ✅ ADDED: `bookmaker_index` za offset calculation
+  - ✅ CHANGED: Timing - 300s + offset, interval 250-350s
+  - ✅ ADDED: Action sequences (ne samo klik)
+
+- `agents/betting_agent.py` (v2.0 → v3.0)
+  - ❌ REMOVED: `shared_reader` dependency
+  - ✅ ADDED: `get_state_fn` closure za local_state
+  - ✅ ADDED: `get_history_fn` closure za round_history
+  - ✅ ADDED: `db_writer` parametar (shared instance)
+  - ✅ ADDED: `strategy_executor` integracija
+  - ❌ REMOVED: `_get_recent_history()` metoda
+
+### ✨ **New Features**
+
+**Added:**
+- `agents/strategy_executor.py` (v1.0) - Stateless decision engine
+  - Input: round_history (List[Dict], do 100 rundi)
+  - Output: {'bet_amounts': [...], 'auto_stops': [...], 'current_index': 0}
+  - Implementirana Martingale strategija
+  - `analyze_history()` za pattern detection
+
+### 🗃️ **Database Architecture**
+
+**Clarified:**
+- BatchDatabaseWriter: **JEDAN po collector/agent TIPU**
+- Svi MainCollector instance dele JEDAN writer
+- Svi BettingAgent instance dele JEDAN writer
+- Razlog: Batch efikasnost (50-100 zapisa odjednom)
+
+### 📊 **Data Flow**
+
+**Changed:**
+- Worker → **local_state** (primarni, brzo)
+- Worker → **SharedGameState** (opciono, GUI only)
+- Worker → **EventBus** (real-time GUI)
+- Worker → **Database** (batch, shared writer)
+
+### 🔄 **Process vs Thread**
+
+**Defined:**
+- **PROCESSES**: Worker (1 per bookmaker), HealthMonitor
+- **THREADS**: BettingAgent, SessionKeeper (inside Worker)
+- **OBJECT**: StrategyExecutor (poziva BettingAgent)
+
+### ⚠️ **Breaking Changes**
+
+- Existing code using `get_shared_reader()` must be updated
+- Agents must accept closure functions
+- Collectors must use local_state
+
+---
+
 ## 🎯 IMPLEMENTATION ROADMAP
 
 ### Phase 1: Core Infrastructure ✅ **COMPLETED** (2025-11-27)

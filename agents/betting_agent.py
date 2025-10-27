@@ -1,14 +1,14 @@
 # agents/betting_agent.py
-# VERSION: 2.0 - REFAKTORISAN
+# VERSION: 3.0 - REFAKTORISAN SA NOVOM ARHITEKTUROM
 # PURPOSE: Automatizovan betting agent sa novom arhitekturom
 
 import time
 import logging
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Callable
 from dataclasses import dataclass
 from enum import IntEnum
+from collections import deque
 
-from orchestration.shared_reader import get_shared_reader, GameState
 from core.input.transaction_controller import TransactionController, Priority
 from core.communication.event_bus import EventPublisher, EventSubscriber, EventType
 from data_layer.database.batch_writer import BatchDatabaseWriter
@@ -38,33 +38,58 @@ class BetInfo:
 class BettingAgent:
     """
     Refaktorisan betting agent koji koristi novu arhitekturu.
-    
+
     Features:
-    - Koristi Shared Reader za game state
+    - Koristi closure funkcije za pristup Worker's local_state i round_history
     - Transaction Controller za atomske bet operacije
     - Event Bus za komunikaciju
-    - Batch Writer za database
-    - Strategy pattern za betting logiku
+    - Batch Writer za database (shared instance)
+    - Strategy pattern za betting logiku (via StrategyExecutor)
+
+    Runtime: Thread u Worker procesu
+    Exclusivity: Kad je aktivan, SessionKeeper je PAUSED
     """
-    
-    def __init__(self, bookmaker: str, strategy: BaseStrategy, 
-                 coords: Dict, config: BettingConfig):
+
+    def __init__(
+        self,
+        bookmaker: str,
+        strategy: BaseStrategy,
+        coords: Dict,
+        config: BettingConfig,
+        get_state_fn: Callable[[], Dict],
+        get_history_fn: Callable[[], List[Dict]],
+        db_writer: BatchDatabaseWriter,
+        transaction_controller: Optional[TransactionController] = None,
+        strategy_executor: Optional['StrategyExecutor'] = None
+    ):
+        """
+        Initialize BettingAgent.
+
+        Args:
+            bookmaker: Bookmaker name
+            strategy: Strategy instance (legacy, will be replaced by strategy_executor)
+            coords: Screen coordinates
+            config: Betting configuration
+            get_state_fn: Closure za pristup Worker's local_state
+            get_history_fn: Closure za pristup Worker's round_history
+            db_writer: Shared BatchDatabaseWriter instance
+            transaction_controller: Optional TransactionController
+            strategy_executor: Optional StrategyExecutor for decision making
+        """
         self.bookmaker = bookmaker
         self.strategy = strategy
         self.coords = coords
         self.config = config
+        self.get_state = get_state_fn  # Closure za local_state
+        self.get_history = get_history_fn  # Closure za round_history
         self.logger = logging.getLogger(f"BettingAgent-{bookmaker}")
-        
+
         # Components
-        self.shared_reader = get_shared_reader()
-        self.tx_controller = TransactionController()
+        self.tx_controller = transaction_controller or TransactionController()
         self.event_publisher = EventPublisher(f"BettingAgent-{bookmaker}")
         self.event_subscriber = EventSubscriber(f"BettingAgent-{bookmaker}")
-        self.db_writer = BatchDatabaseWriter(
-            db_path="data/databases/betting_history.db",
-            table_name="bets",
-            batch_size=10
-        )
+        self.db_writer = db_writer  # Shared instance from Worker Process
+        self.strategy_executor = strategy_executor  # Optional, for future use
         
         # State tracking
         self.current_bet: Optional[BetInfo] = None
@@ -75,10 +100,11 @@ class BettingAgent:
         self.total_wins = 0
         self.total_losses = 0
         self.total_profit = 0.0
-        
+
         # Control
         self.running = False
-        self.paused = False
+        self.active = True  # Can be paused when session keeper is active
+        self.paused = False  # Paused via pause() method
         
         # Subscribe to events
         self._setup_event_subscriptions()
@@ -103,39 +129,43 @@ class BettingAgent:
         """Main betting loop."""
         self.logger.info("Starting betting agent")
         self.running = True
-        
-        # Get initial balance
-        state = self.shared_reader.get_state(self.bookmaker)
+
+        # Get initial balance via closure
+        state = self.get_state()
         if state:
-            self.balance_start = state.my_money
-            self.balance_current = state.my_money
-        
+            self.balance_start = state.get('my_money', 0.0)
+            self.balance_current = state.get('my_money', 0.0)
+
         while self.running:
             try:
                 if self.paused:
                     time.sleep(0.1)
                     continue
-                
-                # Get current game state
-                state = self.shared_reader.get_state(self.bookmaker)
-                if not state or not state.is_valid:
+
+                # Get current game state via closure (Worker's local_state)
+                state = self.get_state()
+                if not state or not state.get('is_valid', False):
                     time.sleep(0.1)
                     continue
-                
+
                 # Update balance
-                self.balance_current = state.my_money
-                
+                self.balance_current = state.get('my_money', self.balance_current)
+
                 # Process based on phase
                 self._process_phase(state)
-                
+
                 # Track phase changes
-                if state.phase != self.previous_phase:
-                    self.event_publisher.phase_change(
-                        self.bookmaker,
-                        self.previous_phase,
-                        state.phase
+                current_phase = state.get('phase')
+                if current_phase != self.previous_phase:
+                    self.event_publisher.publish(
+                        EventType.PHASE_CHANGE,
+                        {
+                            'bookmaker': self.bookmaker,
+                            'from_phase': self.previous_phase,
+                            'to_phase': current_phase
+                        }
                     )
-                    self.previous_phase = state.phase
+                    self.previous_phase = current_phase
                 
                 # Small delay
                 time.sleep(0.1)
@@ -152,37 +182,60 @@ class BettingAgent:
         
         self.logger.info("Betting agent stopped")
     
-    def _process_phase(self, state: GameState):
-        """Process game state based on phase."""
-        
+    def _process_phase(self, state: Dict):
+        """
+        Process game state based on phase.
+
+        Args:
+            state: Dict from Worker's local_state
+        """
+
+        current_phase = state.get('phase')
+        current_score = state.get('score', 0.0)
+
         # BETTING phase - Place bet if strategy says so
-        if state.phase == GamePhase.BETTING:
+        if current_phase == GamePhase.BETTING.value:
             if not self.current_bet:
-                decision = self.strategy.should_bet(
-                    balance=self.balance_current,
-                    history=self._get_recent_history()
-                )
-                
-                if decision['place_bet']:
-                    self._place_bet(
-                        amount=decision['amount'],
-                        auto_stop=decision['auto_stop']
+                # Get history via closure (Worker's round_history)
+                history = self.get_history()
+
+                # Use StrategyExecutor if available, otherwise legacy strategy
+                if self.strategy_executor:
+                    decision = self.strategy_executor.decide(history)
+                    # decision = {'bet_amounts': [...], 'auto_stops': [...], 'current_index': 0}
+                    if decision.get('bet_amounts'):
+                        idx = decision.get('current_index', 0)
+                        self._place_bet(
+                            amount=decision['bet_amounts'][idx],
+                            auto_stop=decision['auto_stops'][idx]
+                        )
+                else:
+                    # Legacy strategy
+                    decision = self.strategy.should_bet(
+                        balance=self.balance_current,
+                        history=history
                     )
-        
+
+                    if decision.get('place_bet'):
+                        self._place_bet(
+                            amount=decision['amount'],
+                            auto_stop=decision['auto_stop']
+                        )
+
         # SCORE phases - Monitor and potentially cash out
-        elif state.phase in [GamePhase.SCORE_LOW, GamePhase.SCORE_MID, GamePhase.SCORE_HIGH]:
+        elif current_phase in [GamePhase.SCORE_LOW.value, GamePhase.SCORE_MID.value, GamePhase.SCORE_HIGH.value]:
             if self.current_bet and self.current_bet.status == BetStatus.BET_PLACED:
                 # Check if should cash out
                 if self.strategy.should_cash_out(
-                    current_score=state.score,
+                    current_score=current_score,
                     bet_info=self.current_bet
                 ):
-                    self._cash_out(state.score)
+                    self._cash_out(current_score)
         
         # ENDED phase - Record result
-        elif state.phase == GamePhase.ENDED:
+        elif current_phase == GamePhase.ENDED.value:
             if self.current_bet and self.current_bet.status == BetStatus.BET_PLACED:
-                self._record_loss(state.score)
+                self._record_loss(current_score)
     
     def _place_bet(self, amount: float, auto_stop: float):
         """Place a bet."""
@@ -323,11 +376,6 @@ class BettingAgent:
         }
         
         self.db_writer.add(record)
-    
-    def _get_recent_history(self) -> List[BetInfo]:
-        """Get recent betting history."""
-        # TODO: Query from database
-        return []
     
     def pause(self):
         """Pause betting (finish current bet)."""

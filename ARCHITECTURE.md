@@ -194,23 +194,64 @@ class BookmakerWorkerProcess:
 - **Crash isolation** - Pad jednog ne ruši druge
 - **Memory isolation** - Svaki ima svoj memory space
 
-### 2. 📦 Batch Operations Pattern
+### 2. 📦 Batch Operations Pattern - SHARED WRITER PER TYPE
 
-**Problem:** Single database inserts are slow  
-**Solution:** Buffer and batch write
+**Problem:** Single database inserts are slow
+**Solution:** Buffer and batch write with shared writer per collector/agent TYPE
+
+**KRITIČNO: JEDAN BatchWriter po TIPU, ne po bookmaker-u!**
 
 ```python
-# Traditional (SLOW) - 1ms per insert
-for record in records:  # 1000 records
-    db.insert(record)   # Total: 1000ms
+# ❌ POGREŠNO - Svaki Worker ima svoj writer
+Worker1 (Admiral):  BatchWriter instance → 10 zapisa → flush
+Worker2 (Mozzart):  BatchWriter instance → 10 zapisa → flush
+Worker3 (BalkanBet): BatchWriter instance → 10 zapisa → flush
+Total: 3 flushes, manje efikasno
 
-# Batch (FAST) - 10ms for all
-buffer.extend(records)  # 1000 records
-if len(buffer) >= 50:
-    db.insert_many(buffer)  # Total: 10ms
+# ✅ ISPRAVNO - Shared writer po tipu
+MainCollector_Writer (shared):
+  ├─ Worker1 (Admiral)  → add(record)  ┐
+  ├─ Worker2 (Mozzart)  → add(record)  │ Buffer 50-100
+  ├─ Worker3 (BalkanBet)→ add(record)  │ zapisa odjednom
+  └─ Flush → Database (1x, efikasno)   ┘
+
+BettingAgent_Writer (shared):
+  ├─ Worker1 → add(bet)  ┐
+  ├─ Worker2 → add(bet)  │ Buffer zapise
+  └─ Flush → Database    ┘
 ```
 
-**Performance Gain: 50-100x faster**
+**Implementacija:**
+```python
+# U main.py ili ProcessManager
+# Kreiraj SHARED writers
+main_collector_writer = BatchDatabaseWriter(
+    db_path="data/main_game.db",
+    table_name="rounds",
+    batch_size=100
+)
+
+betting_writer = BatchDatabaseWriter(
+    db_path="data/betting_history.db",
+    table_name="bets",
+    batch_size=50
+)
+
+# Prosleđuj ISTI writer svim Workers-ima
+for bookmaker in bookmakers:
+    worker = BookmakerWorkerProcess(
+        bookmaker=bookmaker,
+        main_collector_writer=main_collector_writer,  # Shared!
+        betting_writer=betting_writer  # Shared!
+    )
+```
+
+**Zašto shared?**
+- **50-100x brže** - Batch flush sa više zapisa odjednom
+- **Manje I/O** - Jedan flush umesto N flushova
+- **Thread-safe** - BatchWriter interno koristi lock
+- **SQLite WAL mode** - Dozvoljava konkurentne operacije
+
 
 ### 3. 🔒 Atomic Transaction Pattern
 

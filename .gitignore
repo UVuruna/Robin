@@ -97,6 +97,9 @@ temp/
 # ruff
 .ruff_cache/
 
+# claude
+.claude/
+
 # Models (optional - comment out if you want to track models)
 data/models/*.pkl
 data/models/*.h5

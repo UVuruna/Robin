@@ -1,62 +1,82 @@
 # orchestration/bookmaker_worker.py
 """
-Bookmaker Worker - Optimizovan worker process za praćenje jedne kladionice.
-Koristi sve nove komponente: Fast OCR, Event Bus, Batch Writer.
+Bookmaker Worker - v3.0 Architecture Compliant
+===============================================
+
+Worker Process za praćenje jedne kladionice.
+
+**v3.0 ARCHITECTURE:**
+1. WORKER PROCESS PATTERN - 1 Bookmaker = 1 Process = 1 CPU Core (PARALLELISM!)
+2. LOCAL STATE - Worker ima local_state dict (fast in-process access)
+3. CLOSURE PATTERN - Agents pristupaju local_state preko closure funkcija
+4. SHARED BATCH WRITER - ONE per collector/agent TYPE (shared across workers)
+5. AGENTS AS THREADS - BettingAgent i SessionKeeper run as threads
+6. PARALLEL OCR - Each Worker has own OCR (Template + Tesseract)
+
+**FLOW:**
+Worker Process
+ ├─ OCR Components (Template + Tesseract) - PARALLEL!
+ ├─ local_state (fast dict) - PRIMARY data source
+ ├─ round_history (list of 100 rounds) - For StrategyExecutor
+ ├─ MainCollector (thread) → reads local_state via closure
+ ├─ RGBCollector (thread) → reads local_state via closure
+ ├─ BettingAgent (thread) → reads local_state + history via closure
+ └─ SessionKeeper (thread) → reads local_state via closure
+
+Version: 3.0
 """
 
 import multiprocessing as mp
 from multiprocessing import Event as MPEvent, Queue
 import time
-from typing import Dict, Optional, List, Any
+import threading
+from typing import Dict, Optional, List, Any, Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 import logging
 from pathlib import Path
 
-# Import Phase 1 components
+# Core components
 from core.capture.screen_capture import ScreenCapture
 from core.ocr.tesseract_ocr import TesseractOCR
 from core.ocr.template_ocr import TemplateOCR
 from core.communication.event_bus import EventPublisher, EventSubscriber, EventType, Event
-from core.communication.shared_state import get_shared_state
+from core.communication.shared_state import get_shared_state, BookmakerState, GamePhase
 from data_layer.database.batch_writer import BatchDatabaseWriter, BatchConfig
 
 
 class GameState(Enum):
-    """Stanje igre"""
+    """Internal game state tracking"""
     UNKNOWN = "unknown"
-    WAITING = "waiting"  # Čeka početak runde
-    BETTING = "betting"  # Betting window otvoren
-    LOADING = "loading"  # Loading između rundi
-    PLAYING = "playing"  # Runda u toku
-    ENDED = "ended"     # Runda završena
+    WAITING = "waiting"
+    BETTING = "betting"
+    LOADING = "loading"
+    PLAYING = "playing"
+    ENDED = "ended"
 
 
 @dataclass
-class RoundData:
-    """Podaci o trenutnoj rundi"""
-    round_id: Optional[int] = None
-    start_time: Optional[float] = None
-    end_time: Optional[float] = None
-    final_score: Optional[float] = None
+class RoundRecord:
+    """Single round record for history"""
+    round_id: int
+    bookmaker: str
+    timestamp: str
+    final_score: float
+    duration_seconds: Optional[float] = None
     total_players: Optional[int] = None
     players_left: Optional[int] = None
     total_money: Optional[float] = None
     thresholds_crossed: List[float] = field(default_factory=list)
-    threshold_data: List[Dict] = field(default_factory=list)
 
 
 @dataclass
 class WorkerMetrics:
-    """Metrike worker-a"""
+    """Worker metrics tracking"""
     rounds_collected: int = 0
-    thresholds_collected: int = 0
     ocr_operations: int = 0
     ocr_failures: int = 0
     total_ocr_time_ms: float = 0
-    events_published: int = 0
-    db_writes: int = 0
     errors: int = 0
     uptime_seconds: float = 0
     start_time: float = field(default_factory=time.time)
@@ -64,86 +84,126 @@ class WorkerMetrics:
 
 class BookmakerWorker:
     """
-    Glavni worker za praćenje jedne kladionice.
-    
-    Features:
-    - Fast OCR (10ms)
-    - State machine za game tracking
-    - Event publishing
-    - Batch database writing
-    - Health monitoring
-    - Performance metrics
+    Worker Process - v3.0 Architecture.
+
+    **KEY FEATURES:**
+    - Parallel OCR (each worker has own OCR components)
+    - local_state dict for fast in-process access
+    - round_history list (100 recent rounds for StrategyExecutor)
+    - Closure pattern for agents
+    - Shared BatchWriter per TYPE
+    - Agents run as threads
     """
-    
-    # Pragovi koje pratimo
+
+    # Thresholds to track
     THRESHOLDS = [1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 10.0]
-    
-    # OCR intervali bazirani na stanju
+
+    # OCR intervals based on state
     OCR_INTERVALS = {
-        GameState.WAITING: 1.0,      # Sporo kada čeka
-        GameState.BETTING: 0.5,      # Srednje tokom betting-a
-        GameState.LOADING: 0.5,      # Srednje tokom loading-a
-        GameState.PLAYING: 0.15,     # Brzo tokom igre
-        GameState.ENDED: 2.0,        # Sporo posle kraja
+        GameState.WAITING: 1.0,
+        GameState.BETTING: 0.5,
+        GameState.LOADING: 0.5,
+        GameState.PLAYING: 0.15,  # FAST during game!
+        GameState.ENDED: 2.0,
     }
-    
+
     def __init__(self,
                  bookmaker_name: str,
+                 bookmaker_index: int,
                  coords: Dict[str, Dict],
-                 db_path: str,
+                 db_writers: Dict[str, BatchDatabaseWriter],
                  shutdown_event: MPEvent,
                  health_queue: Queue):
         """
-        Initialize worker.
-        
+        Initialize Worker.
+
         Args:
-            bookmaker_name: Ime kladionice (e.g., "Admiral")
-            coords: Koordinate svih regiona
-            db_path: Putanja do baze
-            shutdown_event: Event za shutdown
-            health_queue: Queue za health signale
+            bookmaker_name: Bookmaker name (e.g., "Admiral")
+            bookmaker_index: Index for offset calculation (0-5)
+            coords: Region coordinates dict
+            db_writers: Shared BatchWriter instances per TYPE
+                       {'main': main_writer, 'betting': betting_writer, 'rgb': rgb_writer}
+            shutdown_event: Multiprocessing Event for shutdown
+            health_queue: Queue for health signals
         """
         self.bookmaker_name = bookmaker_name
+        self.bookmaker_index = bookmaker_index
         self.coords = coords
-        self.db_path = Path(db_path)
+        self.db_writers = db_writers  # SHARED writers per TYPE!
         self.shutdown_event = shutdown_event
         self.health_queue = health_queue
-        
-        # State
+
+        # ===== LOCAL STATE (FAST!) =====
+        self.local_state: Dict[str, Any] = {
+            'bookmaker': bookmaker_name,
+            'phase': GamePhase.UNKNOWN,
+            'score': None,
+            'previous_score': None,
+            'round_start_time': None,
+            'round_end_time': None,
+            'loading_start_time': None,
+            'loading_duration': None,
+            'player_count_current': None,
+            'player_count_total': None,
+            'money_total': None,
+            'my_money': None,
+            'last_update_time': time.time(),
+            'read_count': 0,
+            'error_count': 0
+        }
+
+        # ===== ROUND HISTORY (for StrategyExecutor) =====
+        self.round_history: List[Dict] = []  # Last 100 rounds
+        self.round_counter = 0
+
+        # ===== INTERNAL STATE =====
         self.current_state = GameState.UNKNOWN
         self.previous_state = GameState.UNKNOWN
-        self.current_round = RoundData()
-        
-        # Components
-        self.screen_capture = None
-        self.tesseract_ocr = None
-        self.template_ocr = None
-        self.shared_state = None
-        self.event_publisher = None
-        self.event_subscriber = None
-        self.db_writer = None
-        
-        # Tracking
         self.last_score = None
         self.same_score_count = 0
+
+        # Current round tracking
+        self.current_round = {
+            'round_id': None,
+            'start_time': None,
+            'end_time': None,
+            'final_score': None,
+            'thresholds_crossed': []
+        }
+
+        # ===== COMPONENTS (created in setup) =====
+        self.screen_capture = None
+        self.template_ocr = None
+        self.tesseract_ocr = None
+        self.shared_game_state = None  # For GUI monitoring only
+        self.event_publisher = None
+        self.event_subscriber = None
+
+        # ===== COLLECTORS & AGENTS (threads) =====
+        self.collectors = []
+        self.agents = []
+        self.threads = []
+
+        # ===== METRICS =====
         self.metrics = WorkerMetrics()
-        
-        # Logging
+
+        # ===== LOGGING =====
         self.logger = logging.getLogger(f"Worker-{bookmaker_name}")
-    
+
     def setup(self):
-        """Setup komponenti"""
-        self.logger.info(f"Setting up worker for {self.bookmaker_name}")
+        """Setup all components"""
+        self.logger.info(f"Setting up Worker for {self.bookmaker_name}")
 
         # Screen Capture
         self.screen_capture = ScreenCapture()
 
-        # OCR Components - Use Template OCR primarily, Tesseract as fallback
+        # OCR Components - PARALLEL (each worker has own!)
         self.template_ocr = TemplateOCR()
         self.tesseract_ocr = TesseractOCR()
+        self.logger.info("OCR components initialized (parallel mode)")
 
-        # Shared State
-        self.shared_state = get_shared_state()
+        # Shared State (for GUI monitoring only)
+        self.shared_game_state = get_shared_state()
 
         # Event Bus
         self.event_publisher = EventPublisher(f"Worker-{self.bookmaker_name}")
@@ -153,98 +213,153 @@ class BookmakerWorker:
         self.event_subscriber.subscribe(EventType.PAUSE, self.on_pause_event)
         self.event_subscriber.subscribe(EventType.CONFIG_UPDATE, self.on_config_update)
 
-        # Database Writer
-        db_config = BatchConfig(
-            batch_size=50,
-            flush_interval=2.0
-        )
-        self.db_writer = BatchDatabaseWriter(self.db_path, db_config)
-        self.db_writer.start()
+        # ===== CREATE CLOSURE FUNCTIONS FOR AGENTS =====
+        def get_state_fn() -> Dict:
+            """Closure: Returns current local_state"""
+            return self.local_state.copy()
+
+        def get_history_fn() -> List[Dict]:
+            """Closure: Returns round_history"""
+            return self.round_history.copy()
+
+        self.get_state = get_state_fn
+        self.get_history = get_history_fn
+
+        self.logger.info("Closure functions created for agents")
+
+        # ===== INITIALIZE COLLECTORS & AGENTS =====
+        # TODO: Initialize collectors and agents as threads
+        # self.init_collectors()
+        # self.init_agents()
 
         self.logger.info("Worker setup complete")
-    
+
+    def init_collectors(self):
+        """Initialize collectors (as threads)"""
+        # TODO: Initialize MainCollector, RGBCollector, PhaseCollector
+        # They will use shared BatchWriter instances from self.db_writers
+        pass
+
+    def init_agents(self):
+        """Initialize agents (as threads)"""
+        # TODO: Initialize BettingAgent, SessionKeeper
+        # Pass closure functions: self.get_state, self.get_history
+        # Pass shared BatchWriter: self.db_writers['betting']
+        pass
+
     def run(self):
         """Main worker loop"""
         self.logger.info(f"Worker started for {self.bookmaker_name}")
-        
+
         # Setup
         self.setup()
-        
+
         # Announce start
         self.event_publisher.publish(EventType.PROCESS_START, {
             'bookmaker': self.bookmaker_name,
             'pid': mp.current_process().pid
         })
-        
+
         try:
             while not self.shutdown_event.is_set():
                 loop_start = time.time()
-                
-                # Main processing
-                self.process_cycle()
-                
-                # Send health signal
+
+                # ===== MAIN OCR CYCLE =====
+                self.ocr_cycle()
+
+                # ===== UPDATE SHARED STATE (for GUI) =====
+                self.update_shared_state()
+
+                # ===== SEND HEALTH SIGNAL =====
                 self.send_health_signal()
-                
-                # Update metrics
+
+                # ===== UPDATE METRICS =====
                 self.metrics.uptime_seconds = time.time() - self.metrics.start_time
-                
-                # Adaptive sleep based on state
+
+                # ===== ADAPTIVE SLEEP =====
                 interval = self.OCR_INTERVALS.get(self.current_state, 0.5)
                 elapsed = time.time() - loop_start
                 sleep_time = max(0, interval - elapsed)
-                
+
                 if sleep_time > 0:
                     time.sleep(sleep_time)
-                    
+
         except Exception as e:
             self.logger.error(f"Worker crashed: {e}", exc_info=True)
             self.metrics.errors += 1
-            
+
             # Announce error
             self.event_publisher.publish(EventType.PROCESS_ERROR, {
                 'bookmaker': self.bookmaker_name,
                 'error': str(e)
             }, priority=1)
-            
+
         finally:
             self.cleanup()
-    
-    def process_cycle(self):
-        """Jedan ciklus procesiranja"""
+
+    def ocr_cycle(self):
+        """
+        OCR Cycle - Read game state using OCR.
+
+        This is where Worker does parallel OCR.
+        Results are stored in local_state (PRIMARY).
+        """
+        start_time = time.time()
+
         try:
-            # Read score
+            # ===== READ SCORE =====
             score = self.read_score()
-            
-            # Determine state
+
+            # ===== UPDATE LOCAL STATE =====
+            if score is not None:
+                self.local_state['previous_score'] = self.local_state['score']
+                self.local_state['score'] = score
+                self.local_state['last_update_time'] = time.time()
+                self.local_state['read_count'] += 1
+
+            # ===== DETERMINE STATE =====
             new_state = self.determine_state(score)
-            
-            # Handle state change
+
+            # ===== HANDLE STATE CHANGES =====
             if new_state != self.current_state:
                 self.handle_state_change(new_state)
-            
-            # Process based on current state
+
+            # ===== UPDATE PHASE IN LOCAL STATE =====
+            phase = self.game_state_to_phase(self.current_state)
+            self.local_state['phase'] = phase
+
+            # ===== PROCESS BASED ON STATE =====
             if self.current_state == GameState.PLAYING:
                 self.process_playing_state(score)
             elif self.current_state == GameState.ENDED:
                 self.process_ended_state()
-            elif self.current_state == GameState.BETTING:
-                self.process_betting_state()
-                
+
+            # ===== TRACK SCORE =====
+            if score != self.last_score:
+                self.last_score = score
+
+            # ===== METRICS =====
+            elapsed_ms = (time.time() - start_time) * 1000
+            self.metrics.ocr_operations += 1
+            self.metrics.total_ocr_time_ms += elapsed_ms
+
+            if elapsed_ms > 50:
+                self.logger.warning(f"Slow OCR: {elapsed_ms:.1f}ms")
+
         except Exception as e:
-            self.logger.error(f"Process cycle error: {e}")
+            self.logger.error(f"OCR cycle error: {e}")
+            self.local_state['error_count'] += 1
             self.metrics.errors += 1
-    
+            self.metrics.ocr_failures += 1
+
     def read_score(self) -> Optional[float]:
         """
-        Čitaj score koristeći Template/Tesseract OCR.
+        Read score using Template/Tesseract OCR.
 
         Returns:
-            Score ili None
+            Score or None
         """
-        start_time = time.time()
-
-        # Determine which region to use
+        # Determine region based on last score
         if self.last_score is None or self.last_score < 10:
             region_name = "score_region_small"
         elif self.last_score < 100:
@@ -256,222 +371,201 @@ class BookmakerWorker:
         if not region:
             return None
 
-        # Capture region
+        # Capture
         image = self.screen_capture.capture_region(region)
         if image is None:
-            self.metrics.ocr_failures += 1
             return None
 
-        # Try Template OCR first (faster)
+        # Try Template OCR first (10-15ms)
         score_str = self.template_ocr.read_digits(image, category="score", allow_decimal=True)
 
-        # Fallback to Tesseract if template fails
-        if score_str is None:
-            score = self.tesseract_ocr.read_score(image)
-        else:
+        if score_str:
             try:
-                score = float(score_str)
+                return float(score_str)
             except (ValueError, TypeError):
-                score = None
+                pass
 
-        # Update metrics
-        elapsed_ms = (time.time() - start_time) * 1000
-        self.metrics.ocr_operations += 1
-        self.metrics.total_ocr_time_ms += elapsed_ms
-
-        if score is None:
-            self.metrics.ocr_failures += 1
-            return None
-
-        # Log if slow
-        if elapsed_ms > 50:
-            self.logger.warning(
-                f"Slow OCR: {elapsed_ms:.1f}ms for {region_name}"
-            )
-
+        # Fallback to Tesseract (100ms)
+        score = self.tesseract_ocr.read_score(image)
         return score
-    
+
     def determine_state(self, score: Optional[float]) -> GameState:
-        """
-        Odredi trenutno stanje igre.
-        
-        Args:
-            score: Trenutni score ili None
-            
-        Returns:
-            GameState
-        """
+        """Determine current game state based on score"""
         if score is None:
-            # No score visible
             if self.current_state == GameState.PLAYING:
-                # Lost score during play - probably ended
                 return GameState.ENDED
             else:
-                # Could be betting or waiting
                 return GameState.WAITING
-        
+
         elif score == self.last_score and self.last_score is not None:
-            # Same score multiple times
             self.same_score_count += 1
-            
+
             if self.same_score_count >= 3:
-                # Score frozen - game ended
                 return GameState.ENDED
             else:
                 return self.current_state
-        
+
         else:
-            # Score changing - game is playing
             self.same_score_count = 0
             return GameState.PLAYING
-    
+
+    def game_state_to_phase(self, game_state: GameState) -> GamePhase:
+        """Convert GameState to GamePhase"""
+        mapping = {
+            GameState.UNKNOWN: GamePhase.UNKNOWN,
+            GameState.WAITING: GamePhase.BETTING,
+            GameState.BETTING: GamePhase.BETTING,
+            GameState.LOADING: GamePhase.LOADING,
+            GameState.PLAYING: GamePhase.SCORE_LOW,  # TODO: Refine based on score
+            GameState.ENDED: GamePhase.ENDED
+        }
+        return mapping.get(game_state, GamePhase.UNKNOWN)
+
     def handle_state_change(self, new_state: GameState):
-        """Handle promenu stanja"""
+        """Handle state transitions"""
         old_state = self.current_state
         self.current_state = new_state
         self.previous_state = old_state
-        
+
         self.logger.info(f"State change: {old_state.value} → {new_state.value}")
-        
+
         # Publish event
         self.event_publisher.publish(EventType.PHASE_CHANGE, {
             'bookmaker': self.bookmaker_name,
             'old_state': old_state.value,
             'new_state': new_state.value
         })
-        
+
         # Handle specific transitions
         if new_state == GameState.PLAYING and old_state != GameState.PLAYING:
-            # Round started
             self.handle_round_start()
-        
+
         elif new_state == GameState.ENDED and old_state == GameState.PLAYING:
-            # Round ended
             self.handle_round_end()
-    
+
     def handle_round_start(self):
-        """Handle početak runde"""
-        self.logger.info(f"🎬 Round started for {self.bookmaker_name}")
-        
-        # Reset round data
-        self.current_round = RoundData()
-        self.current_round.start_time = time.time()
-        
+        """Handle round start"""
+        self.logger.info(f"Round started for {self.bookmaker_name}")
+
+        # Update local_state
+        self.local_state['round_start_time'] = time.time()
+        self.local_state['round_end_time'] = None
+
         # Reset tracking
         self.same_score_count = 0
-        
+        self.round_counter += 1
+
+        # Reset current round
+        self.current_round = {
+            'round_id': self.round_counter,
+            'start_time': time.time(),
+            'end_time': None,
+            'final_score': None,
+            'thresholds_crossed': []
+        }
+
         # Publish event
         self.event_publisher.publish(EventType.ROUND_START, {
             'bookmaker': self.bookmaker_name,
             'timestamp': datetime.now().isoformat()
         })
-        
+
         self.metrics.rounds_collected += 1
-    
+
     def handle_round_end(self):
-        """Handle kraj runde"""
-        self.logger.info(
-            f"🔴 Round ended for {self.bookmaker_name}: {self.last_score:.2f}x"
-        )
-        
-        # Update round data
-        self.current_round.end_time = time.time()
-        self.current_round.final_score = self.last_score
-        
+        """Handle round end"""
+        final_score = self.last_score
+        self.logger.info(f"Round ended for {self.bookmaker_name}: {final_score:.2f}x")
+
+        # Update local_state
+        self.local_state['round_end_time'] = time.time()
+
+        # Update current round
+        self.current_round['end_time'] = time.time()
+        self.current_round['final_score'] = final_score
+
         # Read additional data
         self.read_ended_data()
-        
-        # Save to database
+
+        # Save round to database
         self.save_round()
-        
+
+        # Create round record for history
+        round_record = {
+            'round_id': self.round_counter,
+            'bookmaker': self.bookmaker_name,
+            'timestamp': datetime.now().isoformat(),
+            'final_score': final_score,
+            'duration_seconds': (
+                self.current_round['end_time'] - self.current_round['start_time']
+                if self.current_round['start_time'] else None
+            ),
+            'thresholds_crossed': self.current_round['thresholds_crossed']
+        }
+
+        # Add to history (keep last 100)
+        self.round_history.append(round_record)
+        if len(self.round_history) > 100:
+            self.round_history.pop(0)
+
         # Publish event
         self.event_publisher.publish(EventType.ROUND_END, {
             'bookmaker': self.bookmaker_name,
-            'final_score': self.last_score,
-            'total_players': self.current_round.total_players,
-            'players_left': self.current_round.players_left,
-            'total_money': self.current_round.total_money,
-            'thresholds_collected': len(self.current_round.thresholds_crossed)
+            'final_score': final_score,
+            'round_id': self.round_counter
         })
-    
+
     def process_playing_state(self, score: Optional[float]):
-        """Procesiranje tokom igre"""
+        """Process during active game"""
         if score is None:
             return
-        
+
         # Check for threshold crossing
         if self.last_score and score > self.last_score:
             threshold = self.check_threshold_crossed(self.last_score, score)
-            
+
             if threshold:
                 self.handle_threshold_crossed(score, threshold)
-        
-        # Update score
+
+        # Publish score update (lower priority)
         if score != self.last_score:
-            self.last_score = score
-            
-            # Publish score update (lower priority)
             self.event_publisher.publish(EventType.SCORE_UPDATE, {
                 'bookmaker': self.bookmaker_name,
                 'score': score
             }, priority=7)
-    
+
     def process_ended_state(self):
-        """Procesiranje nakon kraja"""
-        # Wait a bit then check for new round
+        """Process after round end"""
+        # Wait a bit for new round
         time.sleep(2.0)
-        
-        # Check if new round started
-        score = self.read_score()
-        if score and score != self.last_score:
-            # New round detected
-            self.current_state = GameState.PLAYING
-            self.handle_round_start()
-            self.last_score = score
-    
-    def process_betting_state(self):
-        """Procesiranje tokom betting window-a"""
-        # Could place bets here if betting agent is active
-        pass
-    
+
     def check_threshold_crossed(self, prev: float, current: float) -> Optional[float]:
         """
-        Proveri da li je pređen threshold.
-        
+        Check if threshold was crossed.
+
         Returns:
-            Threshold vrednost ili None
+            Threshold value or None
         """
         for threshold in self.THRESHOLDS:
-            if threshold in self.current_round.thresholds_crossed:
+            if threshold in self.current_round['thresholds_crossed']:
                 continue
-            
+
             if prev < threshold <= current:
                 return threshold
-        
+
         return None
-    
+
     def handle_threshold_crossed(self, score: float, threshold: float):
-        """Handle prelazak threshold-a"""
-        self.logger.info(
-            f"✓ Threshold {threshold}x crossed at {score:.2f}x"
-        )
-        
+        """Handle threshold crossing"""
+        self.logger.info(f"Threshold {threshold}x crossed at {score:.2f}x")
+
         # Mark as crossed
-        self.current_round.thresholds_crossed.append(threshold)
-        
+        self.current_round['thresholds_crossed'].append(threshold)
+
         # Read additional data
         players_left = self.read_players_left()
         total_money = self.read_total_money()
-        
-        # Store threshold data
-        self.current_round.threshold_data.append({
-            'threshold': threshold,
-            'actual_score': score,
-            'players_left': players_left,
-            'total_money': total_money,
-            'timestamp': datetime.now().isoformat()
-        })
-        
+
         # Publish event
         self.event_publisher.publish(EventType.THRESHOLD_CROSSED, {
             'bookmaker': self.bookmaker_name,
@@ -480,25 +574,19 @@ class BookmakerWorker:
             'players_left': players_left,
             'total_money': total_money
         })
-        
-        self.metrics.thresholds_collected += 1
-    
+
     def read_ended_data(self):
-        """Čitaj podatke sa ENDED ekrana"""
+        """Read data from ENDED screen"""
         try:
             # Read total players
             if "other_count_region" in self.coords:
                 image = self.screen_capture.capture_region(self.coords["other_count_region"])
                 if image is not None:
-                    player_count_text = self.tesseract_ocr.read_player_count(image)
+                    player_count = self.tesseract_ocr.read_player_count(image)
 
-                    if player_count_text and '/' in player_count_text:
-                        parts = player_count_text.split('/')
-                        try:
-                            self.current_round.players_left = int(parts[0].strip())
-                            self.current_round.total_players = int(parts[1].strip())
-                        except (ValueError, IndexError):
-                            pass
+                    if player_count:
+                        self.local_state['player_count_current'] = player_count[0]
+                        self.local_state['player_count_total'] = player_count[1]
 
             # Read total money
             if "other_money_region" in self.coords:
@@ -507,13 +595,13 @@ class BookmakerWorker:
                     money_value = self.tesseract_ocr.read_money(image)
 
                     if money_value is not None:
-                        self.current_round.total_money = money_value
+                        self.local_state['money_total'] = money_value
 
         except Exception as e:
             self.logger.error(f"Error reading ended data: {e}")
-    
+
     def read_players_left(self) -> Optional[int]:
-        """Čitaj broj preostalih igrača"""
+        """Read number of players left"""
         if "other_count_region" not in self.coords:
             return None
 
@@ -521,20 +609,15 @@ class BookmakerWorker:
         if image is None:
             return None
 
-        player_count_text = self.tesseract_ocr.read_player_count(image)
+        player_count = self.tesseract_ocr.read_player_count(image)
 
-        if player_count_text:
-            # Parse "123/456" or just "123"
-            value_str = player_count_text.split('/')[0].strip()
-            try:
-                return int(value_str)
-            except ValueError:
-                return None
+        if player_count:
+            return player_count[0]  # Current players
 
         return None
-    
+
     def read_total_money(self) -> Optional[float]:
-        """Čitaj ukupan novac"""
+        """Read total money"""
         if "other_money_region" not in self.coords:
             return None
 
@@ -544,47 +627,70 @@ class BookmakerWorker:
 
         money_value = self.tesseract_ocr.read_money(image)
         return money_value
-    
+
     def save_round(self):
-        """Sačuvaj rundu u bazu"""
+        """Save round to database"""
         try:
-            # Save main round data
+            # Prepare round data
             round_data = {
                 'bookmaker': self.bookmaker_name,
                 'timestamp': datetime.now().isoformat(),
-                'final_score': self.current_round.final_score,
-                'total_players': self.current_round.total_players,
-                'players_left': self.current_round.players_left,
-                'total_money': self.current_round.total_money,
+                'final_score': self.current_round['final_score'],
+                'total_players': self.local_state.get('player_count_total'),
+                'players_left': self.local_state.get('player_count_current'),
+                'total_money': self.local_state.get('money_total'),
                 'duration_seconds': (
-                    self.current_round.end_time - self.current_round.start_time
-                    if self.current_round.start_time else None
+                    self.current_round['end_time'] - self.current_round['start_time']
+                    if self.current_round['start_time'] else None
                 )
             }
-            
-            self.db_writer.write('rounds', round_data)
-            
-            # Save threshold data
-            # (would need round_id from database for foreign key)
-            for threshold in self.current_round.threshold_data:
-                threshold['bookmaker'] = self.bookmaker_name
-                self.db_writer.write('threshold_scores', threshold)
-            
-            self.metrics.db_writes += 1
-            
+
+            # Write to shared BatchWriter
+            if 'main' in self.db_writers:
+                self.db_writers['main'].write('rounds', round_data)
+
         except Exception as e:
             self.logger.error(f"Error saving round: {e}")
             self.metrics.errors += 1
-    
+
+    def update_shared_state(self):
+        """
+        Update SharedGameState for GUI monitoring.
+
+        NOTE: local_state is PRIMARY, SharedGameState is SECONDARY (GUI only)!
+        """
+        try:
+            state = BookmakerState(
+                bookmaker_name=self.bookmaker_name,
+                phase=self.local_state['phase'],
+                score=self.local_state['score'],
+                previous_score=self.local_state['previous_score'],
+                round_start_time=self.local_state['round_start_time'],
+                round_end_time=self.local_state['round_end_time'],
+                loading_start_time=self.local_state['loading_start_time'],
+                loading_duration=self.local_state['loading_duration'],
+                player_count_current=self.local_state['player_count_current'],
+                player_count_total=self.local_state['player_count_total'],
+                money_total=self.local_state['money_total'],
+                my_money=self.local_state['my_money'],
+                last_update_time=self.local_state['last_update_time'],
+                read_count=self.local_state['read_count'],
+                error_count=self.local_state['error_count']
+            )
+
+            self.shared_game_state.set_state(self.bookmaker_name, state)
+
+        except Exception as e:
+            self.logger.error(f"Error updating shared state: {e}")
+
     def send_health_signal(self):
-        """Pošalji health signal"""
+        """Send health signal to process manager"""
         try:
             health_data = {
                 'bookmaker': self.bookmaker_name,
                 'state': self.current_state.value,
                 'metrics': {
                     'rounds': self.metrics.rounds_collected,
-                    'thresholds': self.metrics.thresholds_collected,
                     'ocr_ops': self.metrics.ocr_operations,
                     'ocr_avg_ms': (
                         self.metrics.total_ocr_time_ms / self.metrics.ocr_operations
@@ -595,98 +701,104 @@ class BookmakerWorker:
                 },
                 'timestamp': time.time()
             }
-            
+
             self.health_queue.put_nowait(health_data)
-            
+
         except:
-            # Queue full, skip
-            pass
-    
+            pass  # Queue full
+
     def on_pause_event(self, event: Event):
         """Handle pause event"""
         if event.data.get('bookmaker') in [self.bookmaker_name, 'all']:
             self.logger.info("Pausing worker...")
-            # Implementation depends on requirements
-    
+            # TODO: Implement pause logic
+
     def on_config_update(self, event: Event):
-        """Handle config update"""
+        """Handle config update event"""
         if event.data.get('bookmaker') in [self.bookmaker_name, 'all']:
             self.logger.info("Updating configuration...")
-            # Update thresholds, intervals, etc.
+
             new_config = event.data.get('config', {})
-            
+
             if 'thresholds' in new_config:
                 self.THRESHOLDS = new_config['thresholds']
-            
+
             if 'ocr_intervals' in new_config:
                 self.OCR_INTERVALS.update(new_config['ocr_intervals'])
-    
+
     def cleanup(self):
-        """Cleanup resursa"""
+        """Cleanup resources"""
         self.logger.info("Cleaning up worker...")
-        
-        # Stop database writer
-        if self.db_writer:
-            self.db_writer.stop()
-        
+
+        # Stop agents (threads)
+        for agent in self.agents:
+            if hasattr(agent, 'stop'):
+                agent.stop()
+
+        # Wait for threads to finish
+        for thread in self.threads:
+            if thread.is_alive():
+                thread.join(timeout=2.0)
+
         # Unsubscribe from events
         if self.event_subscriber:
             self.event_subscriber.unsubscribe_all()
-        
+
         # Announce stop
         if self.event_publisher:
             self.event_publisher.publish(EventType.PROCESS_STOP, {
                 'bookmaker': self.bookmaker_name,
                 'metrics': self.get_metrics()
             })
-        
+
         self.logger.info("Worker cleanup complete")
-    
+
     def get_metrics(self) -> Dict[str, Any]:
-        """Vrati metrike"""
+        """Get worker metrics"""
         return {
             'rounds_collected': self.metrics.rounds_collected,
-            'thresholds_collected': self.metrics.thresholds_collected,
             'ocr_operations': self.metrics.ocr_operations,
             'ocr_failures': self.metrics.ocr_failures,
             'ocr_avg_ms': (
                 self.metrics.total_ocr_time_ms / self.metrics.ocr_operations
                 if self.metrics.ocr_operations > 0 else 0
             ),
-            'events_published': self.metrics.events_published,
-            'db_writes': self.metrics.db_writes,
             'errors': self.metrics.errors,
             'uptime_seconds': self.metrics.uptime_seconds,
             'success_rate': (
-                (self.metrics.ocr_operations - self.metrics.ocr_failures) 
+                (self.metrics.ocr_operations - self.metrics.ocr_failures)
                 / self.metrics.ocr_operations * 100
                 if self.metrics.ocr_operations > 0 else 0
             )
         }
 
 
-def worker_entry_point(bookmaker_name: str,
-                       coords: Dict[str, Dict],
-                       db_path: str,
-                       shutdown_event: MPEvent,
-                       health_queue: Queue,
-                       **kwargs):
-    """Entry point za worker process"""
+def worker_entry_point(
+    bookmaker_name: str,
+    bookmaker_index: int,
+    coords: Dict[str, Dict],
+    db_writers: Dict[str, BatchDatabaseWriter],
+    shutdown_event: MPEvent,
+    health_queue: Queue,
+    **kwargs
+):
+    """Entry point for Worker process"""
     # Setup logging
     logging.basicConfig(
         level=logging.INFO,
         format=f'%(asctime)s | {bookmaker_name:12s} | %(levelname)-8s | %(message)s'
     )
-    
+
     # Create and run worker
     worker = BookmakerWorker(
         bookmaker_name=bookmaker_name,
+        bookmaker_index=bookmaker_index,
         coords=coords,
-        db_path=db_path,
+        db_writers=db_writers,
         shutdown_event=shutdown_event,
         health_queue=health_queue
     )
-    
+
     worker.run()
 
 
@@ -694,7 +806,7 @@ def test_worker():
     """Test worker functionality"""
     import logging
     logging.basicConfig(level=logging.INFO)
-    
+
     # Test coordinates (dummy)
     coords = {
         'score_region_small': {'left': 100, 'top': 100, 'width': 100, 'height': 30},
@@ -703,32 +815,43 @@ def test_worker():
         'other_count_region': {'left': 200, 'top': 100, 'width': 100, 'height': 30},
         'other_money_region': {'left': 300, 'top': 100, 'width': 100, 'height': 30},
     }
-    
+
+    # Create shared BatchWriter
+    from pathlib import Path
+    db_path = Path("data/databases/test.db")
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+
+    main_writer = BatchDatabaseWriter(db_path, BatchConfig(batch_size=50))
+    main_writer.start()
+
+    db_writers = {'main': main_writer}
+
     # Create multiprocessing components
     shutdown_event = mp.Event()
     health_queue = mp.Queue()
-    
+
     # Start worker process
     process = mp.Process(
         target=worker_entry_point,
         args=(
             "TestBookmaker",
+            0,
             coords,
-            "data/databases/test.db",
+            db_writers,
             shutdown_event,
             health_queue
         ),
         name="TestWorker"
     )
-    
+
     process.start()
     print(f"Worker started with PID: {process.pid}")
-    
+
     # Monitor for 30 seconds
     try:
         for i in range(30):
             time.sleep(1)
-            
+
             # Check health signals
             try:
                 health = health_queue.get_nowait()
@@ -736,18 +859,21 @@ def test_worker():
                 print(f"  Metrics: {health['metrics']}")
             except:
                 pass
-                
+
     except KeyboardInterrupt:
         print("\nShutting down...")
-    
+
     # Shutdown
     shutdown_event.set()
     process.join(timeout=5.0)
-    
+
     if process.is_alive():
         process.terminate()
         process.join()
-    
+
+    # Stop BatchWriter
+    main_writer.stop()
+
     print("Test complete!")
 
 

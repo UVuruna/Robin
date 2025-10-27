@@ -38,6 +38,7 @@ from gui.stats_widgets import (
 from core.communication.event_bus import EventSubscriber, EventType
 from gui.tools_tab import ToolsTab
 from utils.logger import AviatorLogger
+from core.capture.region_manager import RegionManager
 
 class AviatorControlPanel(QMainWindow):
     """
@@ -57,6 +58,7 @@ class AviatorControlPanel(QMainWindow):
         self.logger = AviatorLogger.get_logger("GUI")
         self.config_manager = ConfigManager()
         self.app_controller = AppController()
+        self.region_manager = RegionManager()  # For coordinate calculation
 
         # Load last config
         self.config = self.config_manager.load_config()
@@ -310,26 +312,26 @@ class AviatorControlPanel(QMainWindow):
                 QMessageBox.warning(self, "No Config", "Setup cancelled!")
                 return
         
-        # Prepare bookmakers config with coordinates
+        # Calculate coordinates for each bookmaker
         bookmakers_config = []
+        layout = self.config.get("layout", "layout_6")
+        target_monitor = self.config.get("target_monitor", "primary")
+
         for bm in self.config.get("bookmakers", []):
-            # Get coordinates from coord_manager
-            coords = self.coords_manager.calculate_coords(
-                self.config.get("layout", "layout_6"),
-                bm["position"],
-                self.config.get("dual_monitor", False)
+            # Calculate coordinates based on position
+            coords = self.region_manager.get_bookmaker_regions(
+                layout=layout,
+                position=bm.get("position", 1),
+                target_monitor=target_monitor
             )
-            
+
             if coords:
                 bookmakers_config.append({
                     "name": bm["name"],
-                    "position": bm["position"],
+                    "position": bm.get("position", 1),
                     "coords": coords
                 })
-        
-        # Update config with coordinates
-        self.config["bookmakers"] = bookmakers_config
-        
+
         success = self.app_controller.start_app(
             "data_collector",
             self.config,
@@ -339,13 +341,13 @@ class AviatorControlPanel(QMainWindow):
         if success:
             self.btn_start_data.setEnabled(False)
             self.btn_stop_data.setEnabled(True)
-            self.data_log.append("=== Data Collector Started (V2 Architecture) ===\n")
+            self.data_log.append("=== Data Collector Started (v3.0 Architecture) ===\n")
             self.data_log.append(f"Tracking {len(bookmakers_config)} bookmakers")
-            
+
             # Show performance info
-            self.data_log.append("\n📊 Performance Mode:")
-            self.data_log.append("  • OCR: Shared Reader (optimized)")
-            self.data_log.append("  • Database: Batch Writer (50x faster)")
+            self.data_log.append("\n📊 Performance Mode (v3.0):")
+            self.data_log.append("  • OCR: PARALLEL (each worker has own)")
+            self.data_log.append("  • Database: Shared Batch Writer per TYPE")
             self.data_log.append("  • Communication: Event Bus")
 
     def stop_data_collector(self):

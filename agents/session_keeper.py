@@ -1,50 +1,86 @@
 # agents/session_keeper.py
-# VERSION: 2.0 - REFAKTORISAN
+# VERSION: 3.0 - REFAKTORISAN SA NOVOM ARHITEKTUROM
 # PURPOSE: Održava sesiju kada betting agent nije aktivan
 
 import time
 import logging
 import random
-from typing import Dict, List
+from typing import Dict, List, Callable, Optional
 import pyautogui
 
-from orchestration.shared_reader import get_shared_reader
-from core.communication.event_bus import EventPublisher
+from core.communication.event_bus import EventPublisher, EventType
+from core.input.transaction_controller import TransactionController
 from config import GamePhase
 
 class SessionKeeper:
     """
     Agent koji održava sesiju sa povremenim klikovima.
     Sprečava timeout i logout zbog neaktivnosti.
+
+    Runtime: Thread u Worker procesu
+    Exclusivity: Kad je aktivan, BettingAgent je PAUSED
+
+    Timing:
+    - Prvi klik: 300s + offset (30s * bookmaker_index)
+    - Interval: random(250, 350) sekundi
+    - Razmak između bookmaker-a: 30s offset pri inicijalizaciji
     """
-    
-    def __init__(self, bookmaker: str, coords: Dict):
+
+    def __init__(
+        self,
+        bookmaker: str,
+        coords: Dict,
+        get_state_fn: Callable[[], Dict],
+        bookmaker_index: int = 0,
+        transaction_controller: Optional[TransactionController] = None
+    ):
+        """
+        Initialize SessionKeeper.
+
+        Args:
+            bookmaker: Bookmaker name
+            coords: Screen coordinates
+            get_state_fn: Closure funkcija za pristup Worker's local_state
+            bookmaker_index: Index kladionice (0-5) za offset calculation
+            transaction_controller: Optional TransactionController za akcije
+        """
         self.bookmaker = bookmaker
         self.coords = coords
+        self.get_state = get_state_fn  # Closure za local_state
+        self.tx_controller = transaction_controller or TransactionController()
         self.logger = logging.getLogger(f"SessionKeeper-{bookmaker}")
-        
+
         # Components
-        self.shared_reader = get_shared_reader()
         self.event_publisher = EventPublisher(f"SessionKeeper-{bookmaker}")
-        
+
         # Click regions - mesta gde može bezbedno da klikne
         self.safe_click_zones = self._setup_safe_zones()
-        
-        # Timing
-        self.min_interval = 30  # Minimum seconds between clicks
-        self.max_interval = 120  # Maximum seconds between clicks
+
+        # Action sequences (fake transactions)
+        self.action_sequences = self._setup_action_sequences()
+
+        # Timing configuration
+        self.click_interval_min = 250  # 250 sekundi
+        self.click_interval_max = 350  # 350 sekundi
+        self.initial_delay = 300 + (bookmaker_index * 30)  # 300s + offset
+
+        # State
         self.last_click_time = 0
-        self.next_click_time = time.time() + random.uniform(self.min_interval, self.max_interval)
-        
+        self.next_click_time = time.time() + self.initial_delay  # Prvi klik nakon delay
+
         # Control
         self.running = False
         self.active = True  # Can be paused when betting agent is active
-        
+
         # Stats
         self.total_clicks = 0
+        self.total_actions = 0
         self.session_start = time.time()
-        
-        self.logger.info(f"Initialized for {bookmaker}")
+
+        self.logger.info(
+            f"Initialized for {bookmaker} (index={bookmaker_index}, "
+            f"first_click_in={self.initial_delay}s, interval={self.click_interval_min}-{self.click_interval_max}s)"
+        )
     
     def _setup_safe_zones(self) -> List[Dict]:
         """Setup safe click zones based on bookmaker layout."""
@@ -94,28 +130,46 @@ class SessionKeeper:
             })
         
         return zones
-    
+
+    def _setup_action_sequences(self) -> List[List[str]]:
+        """
+        Setup fake action sequences to simulate activity.
+        Random sequence is chosen each time to avoid robotic behavior.
+        """
+        return [
+            ['click_safe_zone', 'pause_short'],
+            ['click_safe_zone', 'pause_medium', 'click_safe_zone'],
+            ['type_fake_amount', 'pause_short', 'clear_amount'],
+            ['type_fake_autostop', 'pause_short', 'clear_autostop'],
+            ['click_safe_zone', 'scroll', 'pause_short'],
+        ]
+
     def run(self):
         """Main session keeper loop."""
         self.logger.info("Starting session keeper")
         self.running = True
         self.session_start = time.time()
-        
+
         while self.running:
             try:
-                # Check if should perform click
+                # Check if should perform action
                 current_time = time.time()
-                
+
                 if self.active and current_time >= self.next_click_time:
-                    # Get game state to avoid clicking during critical moments
-                    state = self.shared_reader.get_state(self.bookmaker)
-                    
-                    # Only click during safe phases
-                    if state and state.phase in [GamePhase.ENDED, GamePhase.BETTING]:
-                        self._perform_click()
+                    # Get game state via closure (Worker's local_state)
+                    state = self.get_state()
+
+                    # Only act during safe phases
+                    if state and state.get('phase') in [GamePhase.ENDED.value, GamePhase.BETTING.value]:
+                        # Randomly choose: simple click or action sequence
+                        if random.random() < 0.7:  # 70% simple click
+                            self._perform_click()
+                        else:  # 30% action sequence
+                            self._perform_action_sequence()
+
                         self._schedule_next_click()
                     else:
-                        # Postpone click if in critical phase
+                        # Postpone if in critical phase
                         self.next_click_time = current_time + 10
                 
                 # Small sleep
@@ -165,11 +219,69 @@ class SessionKeeper:
         except Exception as e:
             self.logger.error(f"Error performing click: {e}")
     
+    def _perform_action_sequence(self):
+        """Perform a random action sequence."""
+        if not self.action_sequences:
+            self.logger.warning("No action sequences defined")
+            return
+
+        try:
+            # Choose random sequence
+            sequence = random.choice(self.action_sequences)
+
+            self.logger.debug(f"Executing action sequence: {sequence}")
+
+            for action in sequence:
+                self._execute_action(action)
+                time.sleep(random.uniform(0.3, 0.8))  # Random pause between actions
+
+            self.total_actions += 1
+
+            # Publish event
+            self.event_publisher.publish(
+                EventType.DATA_COLLECTED,
+                {
+                    'bookmaker': self.bookmaker,
+                    'type': 'session_action_sequence',
+                    'sequence': sequence
+                }
+            )
+
+        except Exception as e:
+            self.logger.error(f"Error performing action sequence: {e}")
+
+    def _execute_action(self, action: str):
+        """Execute single action."""
+        try:
+            if action == 'click_safe_zone':
+                self._perform_click()
+            elif action == 'pause_short':
+                time.sleep(random.uniform(0.2, 0.5))
+            elif action == 'pause_medium':
+                time.sleep(random.uniform(0.5, 1.0))
+            elif action == 'type_fake_amount':
+                amount = random.choice([10, 20, 50, 100])
+                self.tx_controller.type_text(str(amount), clear_first=False)
+            elif action == 'type_fake_autostop':
+                autostop = random.choice([1.5, 2.0, 2.5, 3.0])
+                self.tx_controller.type_text(str(autostop), clear_first=False)
+            elif action == 'clear_amount':
+                self.tx_controller.clear_field()
+            elif action == 'clear_autostop':
+                self.tx_controller.clear_field()
+            elif action == 'scroll':
+                pyautogui.scroll(random.choice([-3, -2, -1, 1, 2, 3]))
+            else:
+                self.logger.warning(f"Unknown action: {action}")
+
+        except Exception as e:
+            self.logger.error(f"Error executing action '{action}': {e}")
+
     def _schedule_next_click(self):
         """Schedule next click with random interval."""
-        interval = random.uniform(self.min_interval, self.max_interval)
+        interval = random.uniform(self.click_interval_min, self.click_interval_max)
         self.next_click_time = time.time() + interval
-        self.logger.debug(f"Next click scheduled in {interval:.1f} seconds")
+        self.logger.debug(f"Next action scheduled in {interval:.1f} seconds ({interval/60:.1f} minutes)")
     
     def pause(self):
         """Pause session keeper (when betting agent is active)."""

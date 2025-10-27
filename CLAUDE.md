@@ -47,6 +47,104 @@ black .
 flake8 .
 ```
 
+## ⚠️ CRITICAL DEVELOPMENT RULES
+
+### 🚫 VERSIONING ANTI-PATTERN - NIKADA!!!
+
+**IMPERATIV: NIKADA ne pravi verzije fajlova ili klasa sa sufiksima!**
+
+❌ **NIKADA:**
+```python
+# LOŠE - NE RADITI OVO!
+bookmaker_worker_v2.py
+bookmaker_worker_v3.py
+BookmakerWorkerV4
+class MyClassV2
+my_module_new.py
+my_module_refactored.py
+```
+
+✅ **UVEK:**
+```python
+# DOBRO - DIREKTNO MENJAJ POSTOJEĆI FAJL
+bookmaker_worker.py  # Menja se direktno!
+class BookmakerWorker  # Ista klasa, nova implementacija
+```
+
+**RAZLOZI:**
+1. Git čuva istoriju - nema potrebe za verzijama
+2. Stare verzije zagađuju codebase
+3. Import statements se ne menjaju
+4. Refactoring je ZAMENA, ne dodavanje
+
+**PROCEDURA ZA REFACTORING:**
+1. Čitaj postojeći fajl
+2. Napravi backup pomoću Git (git commit pre promene)
+3. DIREKTNO izmeni postojeći fajl
+4. Testiraj
+5. Commit sa jasnom porukom
+
+**AKO TI TREBA BACKUP:**
+- Koristi Git: `git stash` ili `git commit`
+- NEMOJ kreirati `_old`, `_backup`, `_v2` fajlove!
+
+---
+
+### 🚨 MISSING FUNCTIONALITY - ABSOLUTE PROHIBITION
+
+**IMPERATIV: NIKADA ne brišeš ili ignorišeš postojeću funkcionalnost bez provere!**
+
+❌ **ZABRANJENO:**
+```python
+# Scenario: Vidiš self.coords_manager u kodu
+# LOŠE: Samo obrišeš jer ne znaš šta je
+# self.coords_manager.calculate_coords(...)  # <- DELETE (GREŠKA!)
+```
+
+✅ **OBAVEZNA PROCEDURA:**
+```python
+# 1. STOP - Ne diraj kod odmah!
+# 2. TRAŽI fajl/klasu:
+#    - Glob/Grep za "coords_manager", "CoordinateManager", "RegionManager"
+#    - Proveri imports u fajlu
+# 3. RAZUMI šta radi:
+#    - Pročitaj implementaciju
+#    - Vidi šta prima i vraća
+# 4. AKO NE NAĐEŠ - PITAJ KORISNIKA!
+#    "Našao sam self.coords_manager ali ne mogu da nađem klasu.
+#     Da li je promenila naziv? Šta je njena uloga?"
+# 5. TEK ONDA menjaj kod
+```
+
+**RAZLOZI:**
+1. Možda je funkcionalnost promenila naziv (RegionManager umesto coords_manager)
+2. Možda je premestena u drugi modul
+3. Možda je **KRITIČNA** za sistem (kao koordinate!)
+4. Brisanje core funkcionalnosti = **BROKEN SYSTEM**
+
+**PRIMER IZ OVOG PROJEKTA:**
+```python
+# ❌ ŠTA SAM URADIO (LOŠE):
+# Linija: self.coords_manager.calculate_coords(...)
+# Akcija: Samo obrisao bez provere
+# Rezultat: Koordinate se ne računaju! GREŠKA!
+
+# ✅ ŠTA SAM TREBAO (DOBRO):
+# 1. Grep za "coords_manager"
+# 2. Naći RegionManager (to je taj modul!)
+# 3. Integrisati RegionManager pravilno
+# 4. Pitati korisnika ako nisam siguran
+```
+
+**KADA SI NESIGURAN - PITAJ!**
+- "Vidim self.X ali ne nalazim tu klasu. Da li je promenila naziv?"
+- "Ne razumem kako funkcioniše koordinatni sistem. Možeš li da objasniš?"
+- "Imam stari kod koji koristi X, da li to treba zameniti sa Y?"
+
+**BOLJE JE DA PITAŠ 10 PUTA NEGO DA OBRIŠEŠ CORE FUNKCIONALNOST!**
+
+---
+
 ## ARCHITECTURE PRINCIPLES
 
 ### 1. WORKER PROCESS PATTERN - PARALELIZAM JE IMPERATIV
@@ -58,11 +156,33 @@ flake8 .
 
 **Razlog:** Sekvencijalno čitanje 6 bookmaker-a bi trajalo 600ms što je neprihvatljivo za real-time tracking.
 
-### 2. BATCH OPERATIONS
+### 2. BATCH OPERATIONS - SHARED WRITER ARHITEKTURA
 - **NIKAD single insert u bazu**
+- **JEDAN BatchWriter po collector/agent TIPU, ne po bookmaker-u!**
 - Uvek koristi BatchDatabaseWriter sa buffer-om od 50-100 zapisa
 - Flush na interval (2 sekunde) ili kada se napuni buffer
-- 50x brže od pojedinačnih INSERT operacija
+- 50-100x brže od pojedinačnih INSERT operacija
+
+**Arhitektura:**
+```python
+# ✅ ISPRAVNO - Shared writer
+# U main.py kreira SHARED writers
+main_writer = BatchDatabaseWriter("main_game.db", batch_size=100)
+betting_writer = BatchDatabaseWriter("betting_history.db", batch_size=50)
+
+# Prosleđuje ISTE instance svim Workers-ima
+worker1 = BookmakerWorkerProcess(main_writer=main_writer)  # Shared
+worker2 = BookmakerWorkerProcess(main_writer=main_writer)  # Shared
+worker3 = BookmakerWorkerProcess(main_writer=main_writer)  # Shared
+
+# Svi workers dodaju u ISTI buffer → batch flush efikasniji
+```
+
+**Zašto shared?**
+- Više zapisa u jednom batch-u (100 umesto 10-20)
+- Manje flush operacija (1 umesto 6)
+- Thread-safe (BatchWriter ima lock)
+- SQLite WAL mode dozvoljava concurrent writes
 
 ### 3. ATOMIC TRANSACTIONS
 - **Sve betting operacije moraju biti atomske**
