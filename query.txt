@@ -1,10 +1,49 @@
-├── collectors/                 # Kolektori podataka
-│   ├── base_collector.py     # Bazna klasa
-│   ├── main_collector.py     # Glavni kolektor
-│   ├── rgb_collector.py      # RGB kolektor
-│   └── phase_collector.py    # Game phase kolektor
-│
-├── agents/                     # Agenti
-│   ├── betting_agent.py      # Betting agent
-│   ├── session_keeper.py     # Session keeper
-│   └── strategy_executor.py  # Strategy executor
+Pitanje 13: MARTINGALE CIKLUS
+Pitanje 14: SAFETY MARGINE za betting:
+
+    * Oba ova pitanja ti odgovaram. Zaboravi To. Ja definisem ciklus. Ide do kraja.
+    Jedini uslov if next bet > balance krece od index 0 tj resetuje ciklus.
+
+    Ionako je to privremeni model dok ne naucimo modele za predikciju.
+    Ako bude treba fine tuning martingale to cu ja definisati ali necemo to sada diskutovati, 
+    pogotovo ne za core znanja za sledece sesije jer to nije bitno.
+
+    Mnogo je bitnije povezanost pojedinacnih skripti, paketa, base klasa itd...
+
+Pitanje 15: PRIORITET RAZVOJA - Šta prvo:
+
+    * Perfekcionisati collectors (data quality) -> To DRUGO
+    * Optimizovati OCR brzinu -> To PRVO
+    * ML modeli za predikciju -> To TRECE
+    * Android remote app -> To na kraju
+
+Pitanje 16: GAME PHASE DETEKCIJA - Koliko je kritična brzina?
+
+    * Trenutno planirate ML model
+    * Ali možda jednostavniji RGB threshold algoritam za početak?
+    * Ili odmah ML jer je to core funkcionalnost? -> Odmah ML model jer necemo pokretati agente bez toga
+        Dok nema toga radi samo main data collector. Cilj je da par dana radimo tako i da oko prvog pokrenemo agente
+
+Pitanje 17: CLAUDE.md STRUKTURA - Da li treba da sadrži:
+
+    * Tehnička ograničenja (OCR < 15ms, 6 kladionica max) --> Ne 
+    * Biznis pravila (50% stanja max, safety first) --> Ne 
+    * Development prioritete --> Ne 
+    * No-go zone (šta NIKAD ne radimo) --> Da
+
+    * Treba da sadrze instrukcije za LLM model Claude. Tj za tvoje buduce sesije.
+    Sta tebe briga kada budes pravio npr. connection.py da li je safety first...
+    Jel kapiras poentu sta je CLAUDE.md? To je fajl koji sluze da ne moram stalno da objasnjavam ceo projekat u svakoj novoj sesiji.
+
+Poslednje pitanje: Imate li specifične "zlatne principe" koje SVAKA buduća Claude sesija mora znati? Npr:
+
+    "Safety over profit" --> Glupost
+    "Never bet more than 50% balance" --> Glupost
+    "Data accuracy > Speed" --> Tacno
+
+    Nakon ovih odgovora, spreman sam da kreiram svih 5 MD fajlova.
+
+    ... -->>> E to... To je CLAUDE.md fajl. Zlatni principi.
+    Principi koji se moraju uvek poštovati.
+    I kratak rezime projekta. Strukture. Zavisnosti...
+    Ono sto bi bilo dobro da model zna kada krene u izradu nekog novog fajla ili neke nove funkcionalnosti
