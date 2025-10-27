@@ -45,10 +45,11 @@ Then check: → collectors/main_collector.py
 - Validate all data before processing
 - Better to miss data than record wrong data
 
-#### SHARED READER PATTERN
-- ONE OCR reads, EVERYONE uses the data
-- Never duplicate OCR operations
-- Use shared memory for data distribution
+#### WORKER PROCESS PARALLELISM
+- ONE BOOKMAKER = ONE PROCESS = ONE CPU CORE
+- Each Worker has its OWN OCR reader
+- Parallel OCR execution (6 bookmakers = 100ms, not 600ms!)
+- Never sequential OCR reading
 
 #### BATCH EVERYTHING
 - Never single database insert
@@ -99,7 +100,153 @@ class YourClass:
 - Skip logging
 - Create tight coupling between modules
 
-### 4. TESTING REQUIREMENTS
+### 4. ADDING A NEW AGENT
+
+Agents run as **threads inside Worker process** (not separate processes).
+
+#### Template Structure:
+```python
+"""
+Module: [AgentName]
+Purpose: [Clear description of agent's role]
+Version: 1.0
+"""
+
+import time
+import logging
+import threading
+from typing import Dict, Optional
+from collections import deque
+
+class YourAgent:
+    """
+    Agent description.
+
+    Runtime: Thread inside Worker process
+    Dependencies: [List what it needs]
+    Exclusivity: [If conflicts with other agents]
+    """
+
+    def __init__(self, bookmaker: str, config: Dict):
+        self.bookmaker = bookmaker
+        self.config = config
+        self.logger = logging.getLogger(f"{self.__class__.__name__}-{bookmaker}")
+
+        # State
+        self.running = False
+        self.active = True  # Can be paused
+
+        # Stats
+        self.stats = {
+            'start_time': time.time(),
+            'actions_count': 0
+        }
+
+    def run(self):
+        """Main agent loop - runs in thread."""
+        self.logger.info(f"Starting {self.__class__.__name__}")
+        self.running = True
+
+        while self.running:
+            try:
+                if self.active:
+                    # Agent logic here
+                    self._do_work()
+
+                time.sleep(1)  # Avoid busy loop
+
+            except KeyboardInterrupt:
+                break
+            except Exception as e:
+                self.logger.error(f"Error: {e}", exc_info=True)
+                time.sleep(5)
+
+        self.logger.info(f"{self.__class__.__name__} stopped")
+
+    def _do_work(self):
+        """Override this with agent-specific logic."""
+        pass
+
+    def pause(self):
+        """Pause agent (e.g., when other agent is active)."""
+        self.active = False
+        self.logger.info("Agent paused")
+
+    def resume(self):
+        """Resume agent."""
+        self.active = True
+        self.logger.info("Agent resumed")
+
+    def stop(self):
+        """Stop agent gracefully."""
+        self.running = False
+
+    def get_stats(self) -> Dict:
+        """Get agent statistics."""
+        uptime = time.time() - self.stats['start_time']
+        return {
+            **self.stats,
+            'uptime_seconds': uptime,
+            'status': 'active' if self.active else 'paused' if self.running else 'stopped'
+        }
+
+    def cleanup(self):
+        """Cleanup resources."""
+        self.logger.info(f"{self.__class__.__name__} cleanup")
+```
+
+#### Integration Steps:
+
+1. **Create agent file** in `agents/your_agent.py`
+2. **Add to Worker Process** in `orchestration/bookmaker_worker.py`:
+   ```python
+   self.your_agent = YourAgent(bookmaker, config)
+   self.agent_thread = threading.Thread(
+       target=self.your_agent.run,
+       daemon=False
+   )
+   self.agent_thread.start()
+   ```
+3. **Add GUI tab** in `main.py` (if needed)
+4. **Update CHANGELOG.md**
+
+#### Agent Communication:
+
+**Access Worker's local_state:**
+```python
+# In Worker Process:
+class BookmakerWorkerProcess:
+    def start_agents(self):
+        self.betting_agent = BettingAgent(
+            get_state_fn=lambda: self.local_state,  # Closure!
+            get_history_fn=lambda: list(self.round_history)
+        )
+
+# In BettingAgent:
+class BettingAgent:
+    def __init__(self, get_state_fn, get_history_fn):
+        self.get_state = get_state_fn
+        self.get_history = get_history_fn
+
+    def _do_work(self):
+        state = self.get_state()  # Reads Worker's local_state
+        history = self.get_history()  # Reads Worker's round_history
+```
+
+**Mutual Exclusivity (e.g., BettingAgent vs SessionKeeper):**
+```python
+# When BettingAgent starts:
+def start_betting(self):
+    self.session_keeper.pause()  # Pause SessionKeeper
+    self.betting_agent.resume()
+
+# When SessionKeeper starts:
+def start_session_keeping(self):
+    self.betting_agent.pause()  # Pause BettingAgent
+    self.session_keeper.resume()
+```
+
+### 5. TESTING REQUIREMENTS
 
 Before considering any module complete:
 1. Unit tests for all public methods
@@ -162,18 +309,20 @@ When making decisions, prioritize in this order:
 ### 9. QUESTIONS TO ASK
 
 Before implementing anything:
-1. Does this follow the Shared Reader pattern?
-2. Am I using batch operations?
-3. Is this loosely coupled via EventBus?
+1. Does this follow Worker Process per Bookmaker pattern (parallel)?
+2. Am I using batch operations for database?
+3. Is this loosely coupled (EventBus for GUI, direct for workers)?
 4. Have I handled all error cases?
 5. Will this scale to 6+ bookmakers?
+6. Am I using local_state (fast) or SharedGameState (GUI only)?
 
 ### 10. RED FLAGS TO AVOID
 
 Stop immediately if you find yourself:
-- Writing duplicate OCR code
-- Doing single database inserts
-- Creating direct process communication
+- Writing sequential OCR code (must be parallel!)
+- Doing single database inserts (must batch!)
+- Reading from database in Workers (only INSERT!)
+- Creating direct inter-process calls (use EventBus for GUI)
 - Hardcoding values
 - Skipping error handling
 - Not writing tests
@@ -190,9 +339,10 @@ When reviewing code or planning features:
 5. Is error recovery implemented?
 
 ### CHECK THESE ITEMS
-- [ ] Follows Shared Reader pattern
-- [ ] Uses batch database operations
-- [ ] Communicates via EventBus
+- [ ] Follows Worker Process per Bookmaker pattern (parallel OCR)
+- [ ] Uses batch database operations (no single inserts)
+- [ ] Uses local_state primarily, SharedGameState only for GUI
+- [ ] Communicates via EventBus for GUI updates
 - [ ] Has proper error handling
 - [ ] Includes cleanup methods
 - [ ] Has statistics tracking

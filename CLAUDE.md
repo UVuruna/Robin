@@ -49,11 +49,14 @@ flake8 .
 
 ## ARCHITECTURE PRINCIPLES
 
-### 1. SHARED READER PATTERN
-- **JEDAN OCR čita, SVI koriste podatke**
-- SharedGameStateReader čita jednom i stavlja u shared memory
-- Svi collectors i agents pristupaju istim podacima bez dodatnog OCR-a
-- Ovo je CORE princip - nikad dupliraj OCR čitanje
+### 1. WORKER PROCESS PATTERN - PARALELIZAM JE IMPERATIV
+- **JEDAN BOOKMAKER = JEDAN PROCES = JEDAN CPU CORE**
+- Svaki Worker Process ima SVOJ OCR reader
+- OCR je CPU-intensive (Tesseract ~100ms) - mora paralelno!
+- 6 bookmaker-a = 6 paralelnih procesa = 100ms (ne 600ms!)
+- Ovo je CORE princip - nikad sekvencijalno OCR čitanje
+
+**Razlog:** Sekvencijalno čitanje 6 bookmaker-a bi trajalo 600ms što je neprihvatljivo za real-time tracking.
 
 ### 2. BATCH OPERATIONS
 - **NIKAD single insert u bazu**
@@ -68,10 +71,58 @@ flake8 .
 - Retry logika sa exponential backoff
 
 ### 4. EVENT-DRIVEN COMMUNICATION
-- **EventBus za svu inter-process komunikaciju**
+- **EventBus za real-time GUI updates i logging**
 - Pub/Sub pattern, ne direktne veze
 - Process-safe preko multiprocessing Queue
-- Rate limiting i priority events
+- Workers publish events, GUI subscribes
+
+**Upotreba:**
+```python
+# Worker publishes
+event_bus.publish(EventType.ROUND_END, {'bookmaker': 'Admiral', 'score': 3.45})
+
+# GUI subscribes
+@event_subscriber.subscribe(EventType.ROUND_END)
+def on_round_end(event):
+    self.log_widget.append(f"Round: {event.data['score']}")
+```
+
+### 5. LOCAL STATE vs SHARED STATE
+**KRITIČNO razumevanje:**
+
+**A) LOCAL STATE (unutar Worker procesa - PRIMARY)**
+- Glavni state structure unutar svakog Worker procesa
+- `local_state = {}` - Python dict, in-process memory
+- **BRZI pristup** - nema multiprocessing overhead
+- Collectors i Agents interno koriste local_state
+
+**B) SHARED GAME STATE (između procesa - OPTIONAL)**
+- `core/communication/shared_state.py` - Manager().dict()
+- Za deljenje statistike sa GUI-jem
+- **Sporiji** - multiprocessing overhead
+- Workers opciono pišu statistiku ovde za GUI
+
+**Ko koristi šta:**
+- **MainCollector**: Čita `local_state` procesa
+- **BettingAgent**: Čita `local_state` (closure funkcija)
+- **RGBCollector**: Direktan screen capture (ne koristi ni jedan state)
+- **GUI**: Čita `SharedGameState` za prikaz statistike
+
+**Tok podataka:**
+```python
+# U Worker procesu:
+local_state = ocr_reader.read()  # OCR čitanje
+main_collector.collect(local_state)  # Koristi local state
+
+# Opciono za GUI:
+shared_game_state.set('Admiral_stats', {
+    'rounds': 1245,
+    'profit': 250.0
+})
+
+# GUI čita:
+stats = shared_game_state.get('Admiral_stats')
+```
 
 ## PERFORMANCE REQUIREMENTS
 
@@ -136,21 +187,57 @@ core/
 ### ORCHESTRATION (kritično za skalabilnost)
 ```
 orchestration/
-├── shared_reader.py        → Single OCR reader for all workers
+├── bookmaker_worker.py     → Individual bookmaker worker process
+│                             (SVE za jedan bookmaker: OCR, Collectors, Agents)
 ├── process_manager.py      → Worker lifecycle management
-├── coordinator.py          → Multi-bookmaker synchronization
-├── bookmaker_worker.py     → Individual bookmaker worker
+│                             (Spawns N worker processes, 1 per bookmaker)
+├── coordinator.py          → Multi-bookmaker synchronization (optional)
 └── health_monitor.py       → Process health checking
 ```
+
+**VAŽNO:** `shared_reader.py` je deprecated - svaki worker ima svoj OCR reader!
 
 ### COLLECTORS (data gathering workers)
 ```
 collectors/
 ├── base_collector.py       → Base class for all collectors
 ├── main_collector.py       → Round & threshold data collection
+│                             Čita local_state, prati runde
 ├── rgb_collector.py        → RGB training data collection
-└── phase_collector.py      → Game phase detection
+│                             Direktan screen capture, 2 Hz sampling
+└── phase_collector.py      → Game phase transition tracking
+                              Prati BETTING→PLAYING→ENDED promene
 ```
+
+**RAZLIKA PhaseCollector vs RGBCollector:**
+- **PhaseCollector**: Logičke promene faza (iz OCR results), retko
+- **RGBCollector**: Raw RGB pixeli (direktan capture), često (2 Hz)
+- **Oba potrebna** - različite svrhe (flow analiza vs ML training)
+
+### AGENTS (automation components)
+```
+agents/
+├── betting_agent.py        → Betting execution & strategy coordination
+│                             - Thread u Worker procesu
+│                             - Čuva round_history (deque 100)
+│                             - Poziva StrategyExecutor
+│                             - Izvršava preko TransactionController
+│                             - Kad aktivan → SessionKeeper PAUSED
+│
+├── session_keeper.py       → Session maintenance via fake clicks
+│                             - Thread u Worker procesu
+│                             - Interval: 250-350s (random)
+│                             - Prvi klik: 300s + offset (30s * index)
+│                             - Kad aktivan → BettingAgent NE radi
+│
+└── strategy_executor.py    → Strategy decision engine
+                              - Objekat (ne thread)
+                              - Input: round_history (100 rundi)
+                              - Output: [bet_amounts], [auto_stops]
+                              - Stateless - čista funkcija
+```
+
+**KRITIČNO: BettingAgent i SessionKeeper NIKAD simultano za isti bookmaker!**
 
 ### DATA LAYER (optimizovano za brzinu)
 ```
@@ -188,19 +275,21 @@ gui/
 
 ### ❌ NIKAD
 - Single database insert umesto batch
-- Dupliraj OCR čitanje
-- Direktna komunikacija između procesa (uvek EventBus)
-- Blokiraj main thread sa I/O operacijama
+- Sekvencijalno OCR čitanje (mora paralelno!)
+- Direktna komunikacija između procesa (uvek EventBus za GUI)
+- Blokiraj main GUI thread sa I/O operacijama
 - Hardkoduj koordinate ili putanje
 - Koristi global state bez lock-a
 - Ignoriši error handling
+- Čitaj iz baze unutar Worker-a (samo INSERT, ne SELECT!)
 
 ### ❌ NE MENJAJ BEZ DISKUSIJE
-- Shared Reader arhitekturu
+- **Worker Process per Bookmaker** arhitekturu (paralelizam!)
 - Event Bus komunikaciju
 - Batch Writer logiku
 - Transaction Controller atomicity
 - Process Manager health checks
+- Local state vs SharedGameState razliku
 
 ## FILE STRUCTURE RULES
 
@@ -377,19 +466,27 @@ score = state.get('score')  # Defensive access
 ## SESSION WORKFLOW
 
 ### 🚀 On Session Start
-1. **ALWAYS load and read these files:**
+1. **ALWAYS load and read these files FIRST:**
    - [CLAUDE.md](CLAUDE.md) - This file - core technical principles
    - [ARCHITECTURE.md](ARCHITECTURE.md) - Detailed system structure
    - [README.md](README.md) - Project overview and setup
    - [CHANGELOG.md](CHANGELOG.md) - Recent changes history
+   - [project_knowledge.md](project_knowledge.md) - Project-specific knowledge
 
-2. **Understand the request context:**
+2. **CRITICAL: ASK QUESTIONS BEFORE CODING**
+   - **NEVER start implementing without clarifying ambiguities**
+   - If ANY aspect of the task is unclear, ASK first
+   - If multiple approaches are possible, ASK which one to use
+   - If requirements are missing, ASK for details
+   - **Only after receiving clear answers, proceed with implementation**
+
+3. **Understand the request context:**
    - Identify which module/folder is being worked on
    - Check dependencies (what imports this, what does it import)
    - Review related test files in `tests/`
    - Check if change affects Shared Reader or Event Bus
 
-3. **For GUI changes:**
+4. **For GUI changes:**
    - Understand PySide6 thread safety requirements
    - Check if callbacks need Qt signal/slot mechanism
    - Verify main thread vs worker thread context

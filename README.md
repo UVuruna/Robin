@@ -130,42 +130,67 @@ graph LR
 
 ## 🏗️ System Architecture
 
-### Component Overview
+### **KLJUČNI PRINCIP: 1 Bookmaker = 1 Process = 1 CPU Core**
+
+**Zašto paralelizam?** OCR je CPU-intensive (~100ms Tesseract). Sekvencijalno čitanje 6 bookmaker-a bi trajalo 600ms - **neprihvatljivo** za real-time tracking!
 
 ```
-┌─────────────────────────────────────────────────┐
-│                  GUI CONTROL PANEL               │
-└──────────────────┬──────────────────────────────┘
-                   │
-         ┌─────────▼─────────┐
-         │  PROCESS MANAGER  │
-         └─────────┬─────────┘
-                   │
-    ┌──────────────┼──────────────┐
-    │              │              │
-┌───▼────┐   ┌────▼────┐   ┌────▼────┐
-│ SHARED  │   │COLLECTORS│   │ AGENTS  │
-│ READER  │   └─────────┘   └─────────┘
-└─────────┘         │              │
-    │               │              │
-    └───────────────▼──────────────┘
-            SHARED MEMORY
-                   │
-           ┌───────▼────────┐
-           │ BATCH WRITER   │
-           └───────┬────────┘
-                   │
-           ┌───────▼────────┐
-           │   DATABASE     │
-           └────────────────┘
+┌──────────────────────────────────────────────────┐
+│            MAIN PROCESS (GUI)                    │
+│  - PySide6 Control Panel                         │
+│  - ProcessManager (spawns workers)               │
+│  - EventBus (receives events)                    │
+│  - SharedGameState (optional, GUI monitoring)    │
+└─────────┬────────────────────────────────────────┘
+          │
+          │ Spawns 6 independent worker processes
+          │ (TRUE PARALLELISM - 6 CPU cores)
+          │
+    ┌─────┴──────┬──────────┬──────────┬──────────┐
+    │            │          │          │          │
+┌───▼─────┐  ┌──▼──────┐ ┌─▼──────┐ ┌─▼──────┐...
+│WORKER 1 │  │WORKER 2 │ │WORKER 3│ │WORKER 6│
+│Admiral  │  │Mozzart  │ │Balkan  │ │MaxBet  │
+└─────────┘  └─────────┘ └────────┘ └────────┘
+    │            │          │          │
+    ├─ OCR       ├─ OCR     ├─ OCR     ├─ OCR
+    ├─ Collectors├─ Coll    ├─ Coll    ├─ Coll
+    └─ Agents    └─ Agents  └─ Agents  └─ Agents
+
+All write to:
+├─ Database (batch, SQLite WAL mode)
+├─ EventBus (real-time GUI updates)
+└─ SharedGameState (optional, GUI stats)
+```
+
+### Worker Process Internals
+
+**Svaki Worker Process sadrži:**
+```python
+BookmakerWorkerProcess
+├─ OCR Reader (process) - CPU intensive, paralelno!
+├─ Local State (dict) - in-process, brzo
+├─ Round History (deque 100) - za strategiju
+├─ Collectors (process)
+│   ├─ MainCollector - prikuplja runde
+│   ├─ RGBCollector - ML training data
+│   └─ PhaseCollector - phase transitions
+├─ StrategyExecutor (object) - odlučuje strategiju
+└─ Agents (threads)
+    ├─ BettingAgent - izvršava betting
+    └─ SessionKeeper - održava sesiju
 ```
 
 ### Key Design Patterns
 
-#### 🔄 Shared Reader Pattern
+#### 🔄 Worker Process Parallelism
 ```python
-# ONE reader for ALL processes
-SharedReader → Shared Memory → All Collectors/Agents
+# ✅ CORRECT - Parallel (NEW architecture)
+Worker1: OCR (100ms) ┐
+Worker2: OCR (100ms) │ Parallel on
+Worker3: OCR (100ms) │ CPU cores
+...                  ┘
+Total: 100ms (not 600ms!)
 ```
 
 #### 📦 Batch Operations
