@@ -16,6 +16,43 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 import mss
+import platform
+
+# Import win32api only on Windows
+if platform.system() == "Windows":
+    try:
+        import win32api
+        import win32con
+        WIN32_AVAILABLE = True
+    except ImportError:
+        WIN32_AVAILABLE = False
+else:
+    WIN32_AVAILABLE = False
+
+
+def get_taskbar_height() -> int:
+    """
+    Get Windows taskbar height.
+
+    Returns:
+        Taskbar height in pixels. Falls back to 72px if detection fails.
+    """
+    if WIN32_AVAILABLE:
+        try:
+            # Get full screen height and work area height
+            screen_height = win32api.GetSystemMetrics(win32con.SM_CYSCREEN)
+            work_area = win32api.GetSystemMetrics(win32con.SM_CYFULLSCREEN)
+            taskbar_height = screen_height - work_area
+
+            # Sanity check (taskbar usually 40-100px)
+            if 30 <= taskbar_height <= 150:
+                return taskbar_height
+        except Exception as e:
+            logging.getLogger("RegionManager").warning(f"Failed to detect taskbar height: {e}")
+
+    # Fallback to approximation (4% of 2160 = ~86px, close to typical 72px)
+    # User can override in config if needed
+    return 72
 
 
 @dataclass
@@ -90,6 +127,12 @@ class RegionManager:
         # Detect monitors
         self.monitors = self._detect_monitors()
         self.logger.info(f"Detected {len(self.monitors)} monitor(s): {self.monitors}")
+
+        # Taskbar height (can be overridden in config)
+        self.taskbar_height = self.config.get("taskbar_height", None)
+        if self.taskbar_height is None:
+            self.taskbar_height = get_taskbar_height()
+        self.logger.info(f"Taskbar height: {self.taskbar_height}px")
 
         # Cache for calculated layouts
         self._layout_cache: Dict[str, Dict[str, Tuple[int, int]]] = {}
@@ -210,9 +253,11 @@ class RegionManager:
         else:
             raise ValueError(f"Unknown layout: {layout}")
 
-        # Calculate cell dimensions
+        # Calculate cell dimensions (subtract taskbar height from monitor height)
+        effective_height = monitor.height - self.taskbar_height
+
         cell_width = monitor.width // cols
-        cell_height = monitor.height // rows
+        cell_height = effective_height // rows
 
         # Calculate offsets for each position
         offsets = {}

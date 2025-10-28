@@ -23,12 +23,12 @@ class MLPhaseTestWorker(QThread):
     log = Signal(str)
     finished = Signal(dict)
 
-    def __init__(self, layout: str, position: str, dual_monitor: bool, 
+    def __init__(self, layout: str, position: str, target_monitor: str, 
                  iterations: int, delay_ms: int, selected_regions: dict):
         super().__init__()
         self.layout = layout
         self.position = position
-        self.dual_monitor = dual_monitor
+        self.target_monitor = dual_monitor
         self.iterations = iterations
         self.delay_ms = delay_ms
         self.selected_regions = selected_regions
@@ -67,7 +67,7 @@ class MLPhaseTestWorker(QThread):
             manager = RegionManager()
 
             # Get all regions for this position
-            monitor_name = "right" if self.dual_monitor else "primary"
+            monitor_name = self.target_monitor
             regions = manager.get_all_regions_for_position(self.position, self.layout, monitor_name)
 
             # Convert Region objects to dict format for compatibility
@@ -217,11 +217,11 @@ class MLPhaseTestWorker(QThread):
 
 
 class MLPhaseTestDialog(QDialog):
-    def __init__(self, layout: str, position: str, dual_monitor: bool, parent=None):
+    def __init__(self, layout: str, position: str, target_monitor: str, parent=None):
         super().__init__(parent)
         self.layout = layout
         self.position = position
-        self.dual_monitor = dual_monitor
+        self.target_monitor = dual_monitor
         self.worker = None
 
         self.setWindowTitle(f"ML Phase Test - {layout} @ {position}")
@@ -339,7 +339,7 @@ class MLPhaseTestDialog(QDialog):
         self.run_btn.setEnabled(False)
 
         self.worker = MLPhaseTestWorker(
-            self.layout, self.position, self.dual_monitor, 
+            self.layout, self.position, self.target_monitor, 
             iterations, delay_ms, selected_regions
         )
         self.worker.progress.connect(self.progress_bar.setValue)

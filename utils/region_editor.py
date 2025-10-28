@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
     QApplication,
 )
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QFont, QPixmap, QImage, QKeyEvent, QWheelEvent
+from PySide6.QtGui import QFont, QPixmap, QImage, QKeyEvent
 import numpy as np
 import cv2
 import mss
@@ -60,23 +60,23 @@ class RegionEditorDialog(QDialog):
         "auto_play_coords_2": (255, 255, 128),
     }
 
-    def __init__(self, layout: str, position: str, dual_monitor: bool, parent=None):
+    def __init__(self, layout: str, position: str, target_monitor: str, parent=None):
         super().__init__(parent)
+
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setFocus()
 
         self.layout = layout
         self.position = position
-        self.dual_monitor = dual_monitor
-        self.screen_offset = 3840 if dual_monitor else 0
+        self.target_monitor = target_monitor
 
         self.coords_file = Path("data/json/screen_regions.json")
         self.coords = {}
         self.current_region_index = 0
         self.shift_pressed = False
-        self.sct = None
         self.position_offset = None
         self.preview_width = 1280
         self.preview_height = 1044
-        self.zoom_level = 1.0
 
         self.setWindowTitle(f"Region Editor - {layout} @ {position}")
         self.setWindowFlags(Qt.WindowType.Window)
@@ -85,19 +85,18 @@ class RegionEditorDialog(QDialog):
         try:
             self._load_coords()
             self._get_position_offset()
-            self.sct = mss.mss()
             self.init_ui()
 
             self.timer = QTimer()
             self.timer.timeout.connect(self.update_preview)
-            self.timer.start(50)
+            self.timer.start(100)  # 10 FPS instead of 20 FPS
 
             # Force maximized
             self.setWindowState(Qt.WindowState.WindowMaximized)
 
             self.log("✅ Region Editor initialized")
             self.log(f"Layout: {layout}, Position: {position}")
-            self.log(f"Dual Monitor: {dual_monitor}")
+            self.log(f"Target Monitor: {target_monitor}")
 
         except Exception as e:
             error_msg = f"Initialization error: {str(e)}\n{traceback.format_exc()}"
@@ -153,8 +152,7 @@ class RegionEditorDialog(QDialog):
             from core.capture.region_manager import RegionManager
 
             manager = RegionManager()
-            monitor_name = "right" if self.dual_monitor else "primary"
-            offsets = manager.calculate_layout_offsets(self.layout, monitor_name)
+            offsets = manager.calculate_layout_offsets(self.layout, self.target_monitor)
 
             if self.position not in offsets:
                 raise ValueError(
@@ -249,7 +247,7 @@ class RegionEditorDialog(QDialog):
         right_layout = QVBoxLayout(right_panel)
         right_layout.setContentsMargins(0, 0, 0, 0)
 
-        preview_title = QLabel("📸 Live Preview (Scroll to Zoom, Middle Click to Fit)")
+        preview_title = QLabel("📸 Live Preview")
         preview_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         preview_title.setStyleSheet("font-size: 11pt; font-weight: bold; padding: 5px;")
         right_layout.addWidget(preview_title)
@@ -275,9 +273,7 @@ class RegionEditorDialog(QDialog):
 <b style="color:#2196F3;">RESIZE:</b> I/K (height), J/L (width)<br>
 <b style="color:#FF9800;">NEXT:</b> M or Tab<br>
 <b style="color:#FF9800;">PREV:</b> N or Alt+Tab<br>
-<b style="color:#F44336;">SHIFT:</b> + key = 10px steps<br>
-<b style="color:#9C27B0;">ZOOM:</b> Mouse Scroll Up/Down<br>
-<b style="color:#9C27B0;">FIT:</b> Middle Mouse Button
+<b style="color:#F44336;">SHIFT:</b> + key = 10px steps
         """
 
         label = QLabel(text)
@@ -293,29 +289,14 @@ class RegionEditorDialog(QDialog):
         scrollbar = self.log_text.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
 
-    def wheelEvent(self, event: QWheelEvent):
-        """Handle mouse wheel for zoom, middle button for fit."""
-        if event.buttons() == Qt.MouseButton.MiddleButton:
-            self.fit_to_screen()
-        else:
-            delta = event.angleDelta().y()
-            if delta > 0:
-                self.zoom_level = min(self.zoom_level * 1.2, 5.0)
-            elif delta < 0:
-                self.zoom_level = max(self.zoom_level / 1.2, 0.1)
-
-    def fit_to_screen(self):
-        """Fit preview to screen."""
-        self.zoom_level = 1.0
-
     def update_preview(self):
         """Update live preview - displays RELATIVE coords."""
         try:
             if not self.position_offset:
                 return
 
-            # Calculate ABSOLUTE screen position
-            left = self.position_offset["left"] + self.screen_offset
+            # position_offset already contains ABSOLUTE coordinates from RegionManager
+            left = self.position_offset["left"]
             top = self.position_offset["top"]
 
             monitor = {
@@ -325,9 +306,11 @@ class RegionEditorDialog(QDialog):
                 "height": self.preview_height,
             }
 
-            screenshot = self.sct.grab(monitor)
-            img = np.array(screenshot)
-            img = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
+            # Use context manager for reliable screenshot
+            with mss.mss() as sct:
+                screenshot = sct.grab(monitor)
+                img = np.array(screenshot)
+                img = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
 
             # Draw regions - RELATIVE coordinates
             current_name = self.REGION_KEYS[self.current_region_index]
@@ -380,14 +363,6 @@ class RegionEditorDialog(QDialog):
                     cv2.LINE_AA,
                 )
 
-            # Apply zoom
-            if self.zoom_level != 1.0:
-                new_width = int(img.shape[1] * self.zoom_level)
-                new_height = int(img.shape[0] * self.zoom_level)
-                img = cv2.resize(
-                    img, (new_width, new_height), interpolation=cv2.INTER_LINEAR
-                )
-
             # Convert to QPixmap
             img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             h, w, ch = img_rgb.shape
@@ -438,10 +413,12 @@ class RegionEditorDialog(QDialog):
 
         # RESIZE: I/K/J/L
         elif key == Qt.Key.Key_I:
-            coords["height"] = max(10, coords["height"] - step)
+            coords["height"] += step
+            coords["top"] -= step
             changed = True
         elif key == Qt.Key.Key_K:
-            coords["height"] += step
+            coords["height"] = max(10, coords["height"] - step)
+            coords["top"] += step
             changed = True
         elif key == Qt.Key.Key_J:
             coords["width"] = max(10, coords["width"] - step)
@@ -451,7 +428,7 @@ class RegionEditorDialog(QDialog):
             changed = True
 
         # NEXT: M or Tab
-        elif key in (Qt.Key.Key_M, Qt.Key.Key_Tab):
+        elif key in (Qt.Key.Key_M, Qt.Key.Key_Space):
             self.current_region_index = (self.current_region_index + 1) % len(
                 self.REGION_KEYS
             )
@@ -459,8 +436,7 @@ class RegionEditorDialog(QDialog):
 
         # PREV: N or Alt+Tab (Shift+Tab in practice)
         elif key == Qt.Key.Key_N or (
-            key == Qt.Key.Key_Tab
-            and event.modifiers() & Qt.KeyboardModifier.ShiftModifier
+            key == Qt.Key.Key_Space and self.shift_pressed
         ):
             self.current_region_index = (self.current_region_index - 1) % len(
                 self.REGION_KEYS
@@ -522,9 +498,8 @@ if __name__ == "__main__":
 
     layout = input("Enter layout (layout_4/layout_6/layout_8): ").strip()
     position = input("Enter position (TL/TR/BL/BR/TC/BC/etc): ").strip()
-    dual_str = input("Dual monitor? (y/n): ").strip().lower()
-    dual_monitor = dual_str == "y"
+    target_monitor = input("Target monitor (primary/left/right/center_1): ").strip() or "primary"
 
     app = QApplication(sys.argv)
-    dialog = RegionEditorDialog(layout, position, dual_monitor)
+    dialog = RegionEditorDialog(layout, position, target_monitor)
     sys.exit(dialog.exec())

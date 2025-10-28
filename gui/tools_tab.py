@@ -43,6 +43,33 @@ class ToolsTab(QWidget):
         except:
             self.all_bookmakers = []
 
+    def _populate_monitor_dropdown(self):
+        """Populate monitor dropdown with detected monitors."""
+        monitors = self.region_manager.get_monitor_setup()
+
+        if len(monitors) == 1:
+            # Single monitor
+            monitor = list(monitors.values())[0]
+            label = f"Primary - {monitor.width}x{monitor.height}"
+            self.monitor_combo.addItem(label, userData="primary")
+        else:
+            # Multiple monitors - format as requested
+            sorted_monitors = sorted(monitors.items(), key=lambda x: monitors[x[0]].x if x[0] in monitors else 0)
+
+            for i, (key, monitor) in enumerate(sorted_monitors):
+                if i == 0:
+                    # First monitor (leftmost)
+                    label = f"Monitor {monitor.index} (Left) - {monitor.width}x{monitor.height}"
+                    self.monitor_combo.addItem(label, userData="left")
+                elif i == len(sorted_monitors) - 1:
+                    # Last monitor (rightmost)
+                    label = f"Monitor {monitor.index} (Right) - {monitor.width}x{monitor.height}"
+                    self.monitor_combo.addItem(label, userData="right")
+                else:
+                    # Middle monitors
+                    label = f"Monitor {monitor.index} (Center {i}) - {monitor.width}x{monitor.height}"
+                    self.monitor_combo.addItem(label, userData=f"center_{i}")
+
     def init_ui(self):
         layout = QVBoxLayout(self)
         layout.setSpacing(10)
@@ -84,9 +111,10 @@ class ToolsTab(QWidget):
         self.position_combo = QComboBox()
         row1.addWidget(self.position_combo, 1)
 
-        self.dual_check = QCheckBox("Dual")
-        self.dual_check.setToolTip("Dual monitor (browser on RIGHT)")
-        row1.addWidget(self.dual_check)
+        row1.addWidget(QLabel("Monitor:"))
+        self.monitor_combo = QComboBox()
+        self._populate_monitor_dropdown()
+        row1.addWidget(self.monitor_combo, 1)
 
         row1.addWidget(QLabel("Preset:"))
         self.preset_combo = QComboBox()
@@ -291,7 +319,7 @@ class ToolsTab(QWidget):
             config["tools_last"] = {
                 "layout": layout,
                 "position": self.position_combo.currentText(),
-                "dual_monitor": self.dual_check.isChecked(),
+                "target_monitor": self.monitor_combo.currentData(),
                 "preset": preset_name,
             }
 
@@ -327,9 +355,21 @@ class ToolsTab(QWidget):
                 if idx >= 0:
                     self.position_combo.setCurrentIndex(idx)
 
-            # Dual
-            if "dual_monitor" in last:
-                self.dual_check.setChecked(last["dual_monitor"])
+            # Monitor (with backward compatibility)
+            if "target_monitor" in last:
+                target = last["target_monitor"]
+                # Find dropdown item by userData
+                for i in range(self.monitor_combo.count()):
+                    if self.monitor_combo.itemData(i) == target:
+                        self.monitor_combo.setCurrentIndex(i)
+                        break
+            elif "dual_monitor" in last:
+                # Backward compatibility: dual_monitor=True → "right", False → "primary"
+                target = "right" if last["dual_monitor"] else "primary"
+                for i in range(self.monitor_combo.count()):
+                    if self.monitor_combo.itemData(i) == target:
+                        self.monitor_combo.setCurrentIndex(i)
+                        break
 
             # Preset
             if "preset" in last:
@@ -349,10 +389,11 @@ class ToolsTab(QWidget):
         return bookmakers
 
     def get_current_settings(self) -> tuple:
+        """Get current settings (layout, position, target_monitor)."""
         return (
             self.layout_combo.currentText(),
             self.position_combo.currentText(),
-            self.dual_check.isChecked(),
+            self.monitor_combo.currentData(),  # Returns userData (e.g., "right", "left", "primary")
         )
 
     def create_region_tools(self) -> QGroupBox:
@@ -482,25 +523,25 @@ class ToolsTab(QWidget):
 
     # Tool openers
     def open_region_editor(self):
-        layout, position, dual = self.get_current_settings()
+        layout, position, target_monitor = self.get_current_settings()
         if not layout or not position or position == "ALL":
             QMessageBox.warning(self, "Error", "Select layout and specific position")
             return
         try:
             from utils.region_editor import RegionEditorDialog
-            dialog = RegionEditorDialog(layout, position, dual, self)
+            dialog = RegionEditorDialog(layout, position, target_monitor, self)
             dialog.exec()
         except Exception as e:
             QMessageBox.critical(self, "Error", str(e))
 
     def open_region_visualizer(self):
-        layout, position, dual = self.get_current_settings()
+        layout, position, target_monitor = self.get_current_settings()
         if not layout or not position:
             QMessageBox.warning(self, "Error", "Select layout and position")
             return
         try:
             from utils.region_visualizer import RegionVisualizerDialog
-            dialog = RegionVisualizerDialog(layout, position, dual, self)
+            dialog = RegionVisualizerDialog(layout, position, target_monitor, self)
             dialog.exec()
         except Exception as e:
             QMessageBox.critical(self, "Error", str(e))

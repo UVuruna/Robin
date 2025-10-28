@@ -35,12 +35,12 @@ from core.capture.region_manager import RegionManager
 class RegionVisualizerDialog(QDialog):
     """Region Visualizer v10.0 - uses RegionManager."""
 
-    def __init__(self, layout: str, position: str, dual_monitor: bool, parent=None):
+    def __init__(self, layout: str, position: str, target_monitor: str, parent=None):
         super().__init__(parent)
 
         self.layout = layout
         self.position = position
-        self.dual_monitor = dual_monitor
+        self.target_monitor = target_monitor
         self.region_manager = RegionManager()
         self.region_colors = {}
 
@@ -267,8 +267,7 @@ class RegionVisualizerDialog(QDialog):
         """Capture single position with regions."""
         try:
             # Get offset using RegionManager
-            monitor_name = "right" if self.dual_monitor else "primary"
-            offsets = self.region_manager.calculate_layout_offsets(self.layout, monitor_name)
+            offsets = self.region_manager.calculate_layout_offsets(self.layout, self.target_monitor)
 
             if self.position not in offsets:
                 return None
@@ -298,9 +297,7 @@ class RegionVisualizerDialog(QDialog):
                         self.draw_region(img, region_name, region_coords)
 
             # Title
-            title = f"REGION VISUALIZATION: {self.layout} @ {self.position}"
-            if self.dual_monitor:
-                title += " (Right Monitor)"
+            title = f"REGION VISUALIZATION: {self.layout} @ {self.position} [{self.target_monitor}]"
 
             cv2.putText(
                 img, title, (10, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2
@@ -320,13 +317,13 @@ class RegionVisualizerDialog(QDialog):
         try:
             # Determine monitor to capture
             monitor_setup = self.region_manager.get_monitor_setup()
-            if self.dual_monitor and "right" in monitor_setup:
-                target_monitor = monitor_setup["right"]
+            if self.target_monitor in monitor_setup:
+                target_monitor_obj = monitor_setup[self.target_monitor]
             else:
-                target_monitor = list(monitor_setup.values())[0]
+                target_monitor_obj = list(monitor_setup.values())[0]
 
-            left, top = target_monitor.x, target_monitor.y
-            width, height = target_monitor.width, target_monitor.height
+            left, top = target_monitor_obj.x, target_monitor_obj.y
+            width, height = target_monitor_obj.width, target_monitor_obj.height
 
             with mss.mss() as sct:
                 monitor = {"left": left, "top": top, "width": width, "height": height}
@@ -336,8 +333,7 @@ class RegionVisualizerDialog(QDialog):
 
             # Draw regions for ALL positions
             regions = self.region_manager.config.get("regions", {})
-            monitor_name = "right" if self.dual_monitor else "primary"
-            offsets = self.region_manager.calculate_layout_offsets(self.layout, monitor_name)
+            offsets = self.region_manager.calculate_layout_offsets(self.layout, self.target_monitor)
 
             for position_code, (offset_x, offset_y) in offsets.items():
                 if regions:
@@ -351,9 +347,7 @@ class RegionVisualizerDialog(QDialog):
                             }
                             self.draw_region(img, region_name, abs_coords)
 
-            title = f"FULL LAYOUT: {self.layout} (ALL POSITIONS)"
-            if self.dual_monitor:
-                title += " - Right Monitor"
+            title = f"FULL LAYOUT: {self.layout} (ALL POSITIONS) [{self.target_monitor}]"
 
             cv2.putText(
                 img, title, (20, 55), cv2.FONT_HERSHEY_SIMPLEX, 1.6, (255, 255, 255), 3
@@ -509,9 +503,8 @@ if __name__ == "__main__":
 
     layout = input("Enter layout (layout_4/layout_6/layout_8): ").strip()
     position = input("Enter position (TL/TR/BL/BR/TC/BC/etc or ALL): ").strip()
-    dual_str = input("Dual monitor? (y/n): ").strip().lower()
-    dual_monitor = dual_str == "y"
+    target_monitor = input("Target monitor (primary/left/right): ").strip() or "primary"
 
     app = QApplication(sys.argv)
-    dialog = RegionVisualizerDialog(layout, position, dual_monitor)
+    dialog = RegionVisualizerDialog(layout, position, target_monitor)
     sys.exit(dialog.exec())

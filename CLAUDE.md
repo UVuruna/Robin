@@ -5,32 +5,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## PROJECT OVERVIEW
 AVIATOR - Multi-bookmaker Aviator game tracking system with OCR, ML predictions, and automated betting.
 
-**Core principle:** 1 Bookmaker = 1 Process = 1 CPU Core (parallel OCR execution)
-
-## CRITICAL DEVELOPMENT COMMANDS
-
-### Application Entry Points
-```bash
-python main.py                              # GUI Control Panel (primary interface)
-python utils/region_editor.py               # CRITICAL: Setup screen regions interactively
-python utils/region_visualizer.py           # Debug: Visualize current regions with overlays
-python utils/diagnostic.py                  # System diagnostic (8-step validation)
-python utils/template_generator.py          # Generate OCR templates from screenshots
-```
-
-### Testing
-```bash
-python -m pytest tests/                     # All tests
-python -m pytest tests/ocr_performance.py   # OCR speed benchmark (must be < 15ms)
-python -m orchestration.bookmaker_worker    # Test single worker in isolation
-```
-
-### Dependencies
-```bash
-pip install -r requirements.txt
-# CRITICAL: Tesseract OCR must be installed SEPARATELY
-# Windows: https://github.com/UB-Mannheim/tesseract/wiki
-```
+**Core Architecture:** v3.0 - Worker Process Pattern
+**Core Principle:** 1 Bookmaker = 1 Process = 1 CPU Core (parallel OCR execution)
 
 ---
 
@@ -146,18 +122,7 @@ Worker3 → main_writer.add(record) ┘
 # SQLite WAL mode: Allows concurrent writes
 ```
 
-**Implementation:**
-```python
-# In gui/app_controller.py (lines 49-110)
-self.db_writers = {
-    'main': BatchDatabaseWriter('main_game_data.db', batch_size=100),
-    'betting': BatchDatabaseWriter('betting_history.db', batch_size=50),
-    'rgb': BatchDatabaseWriter('rgb_training_data.db', batch_size=100)
-}
-
-# Pass SAME instances to ALL workers
-worker = BookmakerWorker(db_writers=self.db_writers)  # Shared!
-```
+**Implementation:** See `gui/app_controller.py:_init_shared_writers()`
 
 ---
 
@@ -168,7 +133,7 @@ worker = BookmakerWorker(db_writers=self.db_writers)  # Shared!
 **Solution:** Pass closure functions, NOT shared memory.
 
 ```python
-# In orchestration/bookmaker_worker.py (lines 216-228)
+# In orchestration/bookmaker_worker.py
 class BookmakerWorker:
     def setup_agents(self):
         # Create closure functions that capture self
@@ -184,7 +149,7 @@ class BookmakerWorker:
             get_history_fn=get_history_fn   # Closure
         )
 
-# In agents/betting_agent.py (lines 72-73)
+# In agents/betting_agent.py
 class BettingAgent:
     def __init__(self, get_state_fn, get_history_fn):
         self.get_state = get_state_fn  # Store closure
@@ -248,7 +213,7 @@ def worker_entry_point(bookmaker_name, coords, db_writers, shutdown_event, ...):
 Workers adjust OCR speed based on game phase:
 
 ```python
-# orchestration/bookmaker_worker.py (lines 102-108)
+# orchestration/bookmaker_worker.py
 OCR_INTERVALS = {
     GameState.WAITING: 1.0,      # Slow (1 read/sec)
     GameState.BETTING: 0.5,      # Medium (2 reads/sec)
@@ -264,7 +229,7 @@ OCR_INTERVALS = {
 
 ## CRITICAL MODULE DEPENDENCIES
 
-### Core Orchestration (bookmaker_worker.py)
+### Core Orchestration (orchestration/bookmaker_worker.py)
 **Primary worker implementation - understand this first!**
 
 ```python
@@ -293,6 +258,42 @@ class BookmakerWorker:
             get_history_fn=lambda: self.round_history.copy()
         )
 ```
+
+---
+
+### Screen Region Management (core/capture/region_manager.py)
+
+**RegionManager** handles all screen coordinate calculations and multi-monitor support.
+
+**Key Classes:**
+- `Region`: Simple dataclass with left, top, width, height
+- `RegionManager`: Core class that:
+  - Detects monitors using MSS
+  - Loads region configurations from JSON
+  - Calculates dynamic coordinates for different layouts (2x2, 2x3, 2x4)
+  - Transforms base regions to specific grid positions
+
+**Key Methods:**
+```python
+RegionManager.get_region(region_name, position, layout, monitor)
+    # Returns Region with calculated coordinates for specific bookmaker position
+
+RegionManager.get_all_regions_for_position(position, layout, monitor)
+    # Returns all regions for one bookmaker
+
+RegionManager.get_bookmaker_regions(bookmaker_name, bookmaker_config)
+    # Returns all regions based on bookmaker's config
+```
+
+**Usage in Worker:**
+```python
+# Workers receive pre-calculated coords dict, NOT RegionManager instance
+worker = BookmakerWorker(
+    coords={'score': {'left': 100, 'top': 200, 'width': 300, 'height': 100}}
+)
+```
+
+**Important:** RegionManager is used ONCE during initialization in GUI/setup, then coordinates are passed as plain dicts to workers.
 
 ---
 
@@ -482,8 +483,8 @@ class YourAgent:
    ```
 
 3. **Performance verification:**
-   - OCR changes → Run `tests/ocr_performance.py`
-   - ML changes → Run `tests/ml_phase_performance.py`
+   - OCR changes → Run `pytest tests/ocr_performance.py`
+   - ML changes → Run `pytest tests/ml_phase_performance.py`
    - Database changes → Check write speed
 
 ---
@@ -514,8 +515,8 @@ class YourAgent:
 ### OCR Not Reading Correctly
 1. Check browser zoom is exactly 100%
 2. Verify Tesseract: `tesseract --version`
-3. Use region visualizer: `python utils/region_visualizer.py`
-4. Check screen resolution and monitor setup
+3. Check screen resolution and monitor setup
+4. **Class to investigate:** `core.ocr.engine.MultiRegionOCRReader`
 
 ### Worker Process Crashes
 1. Check logs in GUI log widgets
@@ -523,13 +524,13 @@ class YourAgent:
 3. Verify shared memory access is defensive (use `.get()`)
 4. Check EventBus queue depth
 5. Memory leak - check with `psutil`
+6. **Class to investigate:** `orchestration.bookmaker_worker.BookmakerWorker`
 
-### Performance Issues
-```bash
-python tests/ocr_performance.py         # OCR speed benchmark
-python tests/ml_phase_performance.py    # ML model speed
-python -m cProfile -o output.prof main.py
-```
+### RegionManager / Coordinate Issues
+1. **Class:** `core.capture.region_manager.RegionManager`
+2. Verify monitor detection: `RegionManager._detect_monitors()`
+3. Check layout calculations: `RegionManager.calculate_layout_offsets()`
+4. Inspect config file: `config/screen_regions.json`
 
 ---
 
@@ -538,7 +539,7 @@ python -m cProfile -o output.prof main.py
 ### Platform
 - **Windows Only** (uses pywin32 for GUI automation)
 - **Tesseract Required** (must install separately)
-- **Python 3.11+** required
+- **Python 3.11+** required (tested on 3.13)
 
 ### Performance Limits
 - **Max Bookmakers**: 6 (current layout)

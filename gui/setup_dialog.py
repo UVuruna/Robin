@@ -78,9 +78,10 @@ class SetupDialog(QDialog):
         group = QGroupBox("General Setup")
         layout = QFormLayout(group)
 
-        # Dual monitor checkbox
-        self.dual_monitor_check = QCheckBox("Use Dual Monitors")
-        layout.addRow("Monitor Setup:", self.dual_monitor_check)
+        # Monitor selection dropdown
+        self.monitor_combo = QComboBox()
+        self._populate_monitor_dropdown()
+        layout.addRow("Monitor Setup:", self.monitor_combo)
 
         # Number of bookmakers
         self.num_bookmakers_spin = QSpinBox()
@@ -90,6 +91,28 @@ class SetupDialog(QDialog):
         layout.addRow("Number of Bookmakers:", self.num_bookmakers_spin)
 
         return group
+
+    def _populate_monitor_dropdown(self):
+        """Populate monitor dropdown with detected monitors."""
+        monitors = self.region_manager.get_monitor_setup()
+
+        if len(monitors) == 1:
+            monitor = list(monitors.values())[0]
+            label = f"Primary - {monitor.width}x{monitor.height}"
+            self.monitor_combo.addItem(label, userData="primary")
+        else:
+            sorted_monitors = sorted(monitors.items(), key=lambda x: monitors[x[0]].x if x[0] in monitors else 0)
+
+            for i, (key, monitor) in enumerate(sorted_monitors):
+                if i == 0:
+                    label = f"Monitor {monitor.index} (Left) - {monitor.width}x{monitor.height}"
+                    self.monitor_combo.addItem(label, userData="left")
+                elif i == len(sorted_monitors) - 1:
+                    label = f"Monitor {monitor.index} (Right) - {monitor.width}x{monitor.height}"
+                    self.monitor_combo.addItem(label, userData="right")
+                else:
+                    label = f"Monitor {monitor.index} (Center {i}) - {monitor.width}x{monitor.height}"
+                    self.monitor_combo.addItem(label, userData=f"center_{i}")
 
     def create_bookmakers_setup(self) -> QGroupBox:
         """Create bookmakers setup group."""
@@ -229,8 +252,19 @@ class SetupDialog(QDialog):
         last_setup = self.config.get("last_setup")
 
         if last_setup:
-            # Dual monitor
-            self.dual_monitor_check.setChecked(last_setup.get("dual_monitor", False))
+            # Monitor (with backward compatibility)
+            if "target_monitor" in last_setup:
+                target = last_setup["target_monitor"]
+                for i in range(self.monitor_combo.count()):
+                    if self.monitor_combo.itemData(i) == target:
+                        self.monitor_combo.setCurrentIndex(i)
+                        break
+            elif "dual_monitor" in last_setup:
+                target = "right" if last_setup["dual_monitor"] else "primary"
+                for i in range(self.monitor_combo.count()):
+                    if self.monitor_combo.itemData(i) == target:
+                        self.monitor_combo.setCurrentIndex(i)
+                        break
 
             # Bookmakers
             bookmakers = last_setup.get("bookmakers", [])
@@ -269,7 +303,7 @@ class SetupDialog(QDialog):
 
         return {
             "last_setup": {
-                "dual_monitor": self.dual_monitor_check.isChecked(),
+                "target_monitor": self.monitor_combo.currentData(),
                 "bookmakers": bookmakers,
             },
             "betting_agent": {

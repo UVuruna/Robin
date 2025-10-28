@@ -15,7 +15,7 @@ class ConfigManager:
     {
         "last_setup": {
             "layout": "layout_6",
-            "dual_monitor": false,
+            "target_monitor": "right",
             "positions": {
                 "TL": "BalkanBet",
                 "TC": "Merkur",
@@ -100,17 +100,17 @@ class ConfigManager:
             self.logger.error(f"Error saving config: {e}")
             raise
 
-    def update_last_setup(self, dual_monitor: bool, bookmakers: list):
+    def update_last_setup(self, target_monitor: str, bookmakers: list):
         """
         Update last_setup in config.
 
         Args:
-            dual_monitor: Boolean for dual monitor setup
+            target_monitor: Monitor identifier (e.g., "primary", "left", "right", "center_1")
             bookmakers: List of dicts with 'name' and 'position'
         """
         config = self.load_config()
 
-        config["last_setup"] = {"dual_monitor": dual_monitor, "bookmakers": bookmakers}
+        config["last_setup"] = {"target_monitor": target_monitor, "bookmakers": bookmakers}
 
         self.save_config(config)
         self.logger.info("Updated last_setup")
