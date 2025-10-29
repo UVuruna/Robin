@@ -39,8 +39,8 @@ from pathlib import Path
 
 # Core components
 from core.capture.screen_capture import ScreenCapture
-from core.ocr.tesseract_ocr import TesseractOCR
-from core.ocr.template_ocr import TemplateOCR
+from core.ocr.engine import OCREngine
+from config.settings import OCR, OCRMethod
 from core.communication.event_bus import EventPublisher, EventSubscriber, EventType, Event
 from core.communication.shared_state import get_shared_state, BookmakerState, GamePhase
 from data_layer.database.batch_writer import BatchDatabaseWriter, BatchConfig
@@ -173,8 +173,7 @@ class BookmakerWorker:
 
         # ===== COMPONENTS (created in setup) =====
         self.screen_capture = None
-        self.template_ocr = None
-        self.tesseract_ocr = None
+        self.ocr_engine = None  # Unified OCR Engine (Template/Tesseract/CNN)
         self.shared_game_state = None  # For GUI monitoring only
         self.event_publisher = None
         self.event_subscriber = None
@@ -197,10 +196,10 @@ class BookmakerWorker:
         # Screen Capture
         self.screen_capture = ScreenCapture()
 
-        # OCR Components - PARALLEL (each worker has own!)
-        self.template_ocr = TemplateOCR()
-        self.tesseract_ocr = TesseractOCR()
-        self.logger.info("OCR components initialized (parallel mode)")
+        # OCR Engine - PARALLEL (each worker has own!)
+        # Method selected from config.settings.OCR.method
+        self.ocr_engine = OCREngine(method=OCR.method)
+        self.logger.info(f"OCR Engine initialized (method: {OCR.method.name}, parallel mode)")
 
         # Shared State (for GUI monitoring only)
         self.shared_game_state = get_shared_state()
@@ -228,24 +227,88 @@ class BookmakerWorker:
         self.logger.info("Closure functions created for agents")
 
         # ===== INITIALIZE COLLECTORS & AGENTS =====
-        # TODO: Initialize collectors and agents as threads
-        # self.init_collectors()
-        # self.init_agents()
+        self.init_collectors()
+        self.init_agents()
 
         self.logger.info("Worker setup complete")
 
     def init_collectors(self):
         """Initialize collectors (as threads)"""
-        # TODO: Initialize MainCollector, RGBCollector, PhaseCollector
-        # They will use shared BatchWriter instances from self.db_writers
-        pass
+        from collectors.main_collector import MainDataCollector
+        from collectors.rgb_collector import RGBCollector
+        from collectors.phase_collector import PhaseCollector
+        import threading
+
+        # Main Data Collector
+        main_collector = MainDataCollector(
+            bookmaker=self.bookmaker_name,
+            shared_state=self.shared_game_state,
+            db_writer=self.db_writers['main'],
+            event_publisher=self.event_publisher
+        )
+        self.collectors.append(main_collector)
+
+        # RGB Collector
+        rgb_collector = RGBCollector(
+            bookmaker=self.bookmaker_name,
+            shared_state=self.shared_game_state,
+            db_writer=self.db_writers['rgb'],
+            event_publisher=self.event_publisher,
+            screen_capture=self.screen_capture,
+            coords=self.coords
+        )
+        self.collectors.append(rgb_collector)
+
+        # Phase Collector
+        phase_collector = PhaseCollector(
+            bookmaker=self.bookmaker_name,
+            shared_state=self.shared_game_state,
+            db_writer=self.db_writers['main'],
+            event_publisher=self.event_publisher
+        )
+        self.collectors.append(phase_collector)
+
+        # NOTE: Collectors are NOT threaded! They're called via run_cycle() from main loop.
+        self.logger.info(f"Initialized {len(self.collectors)} collectors")
 
     def init_agents(self):
         """Initialize agents (as threads)"""
-        # TODO: Initialize BettingAgent, SessionKeeper
-        # Pass closure functions: self.get_state, self.get_history
-        # Pass shared BatchWriter: self.db_writers['betting']
-        pass
+        from agents.betting_agent import BettingAgent
+        from agents.session_keeper import SessionKeeper
+        import threading
+
+        # Betting Agent
+        betting_agent = BettingAgent(
+            bookmaker=self.bookmaker_name,
+            bookmaker_index=self.bookmaker_index,
+            get_state_fn=self.get_state,
+            get_history_fn=self.get_history,
+            db_writer=self.db_writers['betting'],
+            coords=self.coords,
+            event_publisher=self.event_publisher
+        )
+        self.agents.append(betting_agent)
+
+        # Session Keeper
+        session_keeper = SessionKeeper(
+            bookmaker=self.bookmaker_name,
+            bookmaker_index=self.bookmaker_index,
+            get_state_fn=self.get_state,
+            coords=self.coords,
+            event_publisher=self.event_publisher
+        )
+        self.agents.append(session_keeper)
+
+        # Start agent threads
+        for agent in self.agents:
+            thread = threading.Thread(
+                target=agent.run,
+                daemon=True,
+                name=f"{self.bookmaker_name}-{agent.__class__.__name__}"
+            )
+            thread.start()
+            self.threads.append(thread)
+            self.logger.info(f"Started agent: {agent.__class__.__name__}")
 
     def run(self):
         """Main worker loop"""
@@ -266,6 +329,10 @@ class BookmakerWorker:
 
                 # ===== MAIN OCR CYCLE =====
                 self.ocr_cycle()
+
+                # ===== RUN COLLECTORS =====
+                for collector in self.collectors:
+                    collector.run_cycle()
 
                 # ===== UPDATE SHARED STATE (for GUI) =====
                 self.update_shared_state()
@@ -354,7 +421,7 @@ class BookmakerWorker:
 
     def read_score(self) -> Optional[float]:
         """
-        Read score using Template/Tesseract OCR.
+        Read score using OCREngine (Template/Tesseract/CNN).
 
         Returns:
             Score or None
@@ -376,18 +443,19 @@ class BookmakerWorker:
         if image is None:
             return None
 
-        # Try Template OCR first (10-15ms)
-        score_str = self.template_ocr.read_digits(image, category="score", allow_decimal=True)
+        # Read using OCREngine (method selected from config)
+        score_str = self.ocr_engine.read_score(image)
 
         if score_str:
             try:
+                # Remove 'x' suffix if present
+                score_str = score_str.replace('x', '').replace('X', '').strip()
                 return float(score_str)
             except (ValueError, TypeError):
-                pass
+                self.logger.debug(f"Failed to parse score: {score_str}")
+                return None
 
-        # Fallback to Tesseract (100ms)
-        score = self.tesseract_ocr.read_score(image)
-        return score
+        return None
 
     def determine_state(self, score: Optional[float]) -> GameState:
         """Determine current game state based on score"""

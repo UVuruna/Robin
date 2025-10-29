@@ -13,11 +13,23 @@ FAZA I >>
 
 FAZA II >>
     Pisanje skripte za buduci CNN model i uvodjenje u @config/setting.py promenljive koja ce odredjivati KOJI OCR se koristi. 
-    * Dalje ko god koristi OCR tj citanje za REGIONE koji koriste @utils/region_editor, @utils/region_visualizer, @tests/ocr_accuracy, @tests/ocr_performance, @agent/
+    * Dalje ko god koristi OCR tj citanje za REGIONE koji koriste @utils/region_editor, @utils/region_visualizer, @tests/ocr_accuracy, @tests/ocr_performance
+    KAO i glavni fajl koga koriste @agent/betting_agent i @collectors/main_collector
+    Dakle kao sto smo vec nebrojano puta uspostavljali CORE RULES, tj CORE KNOWLEDGE postoji file koji pravi procese u zavisnosti toga koliko ima bookmakera 
+        i on ODRADJUJE citanje REGION tj PRATI stanje RUNDI. Posto su iste runde za betting agenta i main data collector 
+        to omogucava pokretanje OVE DVE CORE funkcionalnosti U ISTO VREME uz ZNACAJNO SMANJIVANJE CPU work-a
 
 FAZA III >>
     Ovde ces raditi proveru SVIH fajlova.
     * Krenuces od main.py i preko zavisnosti (import) procices kroz sve fajlove i sve povezanosti.
-    * Dok to radis bice ti potrebno visestruko #/compact funkcija pa zato uporedo pravi REVIEW.txt (ili md) fajl u kojem navodis sta si sve zakljucio
+    * Dok to radis bice ti potrebno visestruko #/compact funkcija pa zato uporedo pravi JOURNAL.txt (ili md) fajl u kojem navodis sta si sve zakljucio
     * Dakle ovde je cilj da pronadjes, sva neusaglasavanja, sva HARDKODOVANJA, sve ERROR-e itd itd.
     * FOKUS je naravno na betting agent i main data collector da budu uspostavljeni da RADE od VECERAS (tj. SAMO main data collector za veceras ali oba da budu funkcionalna)
+    *** DAKLE OVDE PROVERAS SVE BAS SVE FAJLOVE. DETALJNO. CHECKIRAS NA GRESKE. NA ZASTARELI KOD, NA HARDCOD... 
+    SVE TO UNOSIS U JOURNAL.md
+    *** U JOURNAL.md unosis i sta si nasao od problema i kakve si ispravke napravio.
+    *** OPET kazem trebace ti MNOGO vremena, mnogo COMPACT funkcija i kad DODJEM HOCU da me saceka VELIKI JOURNAL file i FUNKCIONALAN DATA COLLECTOR i Agent
+
+Da li imas pitanja?
+Da li si razumeo?
+Da li to mozes da izvedes?

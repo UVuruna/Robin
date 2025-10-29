@@ -1,0 +1,75 @@
+# DEPENDENCY MAP - Complete Import Tree from main.py
+# Generated: 2025-10-29 FAZA III Audit
+
+main.py
+├─ sys, pathlib.Path (stdlib)
+├─ PySide6.QtWidgets (GUI framework)
+├─ PySide6.QtCore (GUI framework)
+├─ PySide6.QtGui (GUI framework)
+│
+├─ gui.config_manager.ConfigManager
+│  └─ config.settings.PATH (config paths)
+│
+├─ gui.app_controller.AppController ← CORE CONTROLLER
+│  ├─ orchestration.process_manager.ProcessManager
+│  │  └─ multiprocessing (stdlib)
+│  ├─ orchestration.bookmaker_worker.worker_entry_point ← CORE WORKER
+│  │  ├─ core.capture.screen_capture.ScreenCapture
+│  │  ├─ core.ocr.engine.OCREngine ← REFACTORED (uses OCRMethod)
+│  │  │  ├─ config.settings.OCR, OCRMethod
+│  │  │  ├─ core.ocr.tesseract_ocr.TesseractOCR
+│  │  │  ├─ core.ocr.template_ocr.TemplateOCR
+│  │  │  └─ core.ocr.cnn_ocr.CNNOCRReader ← NEW (CNN integration)
+│  │  ├─ core.communication.event_bus (EventPublisher, EventSubscriber)
+│  │  ├─ core.communication.shared_state (get_shared_state)
+│  │  ├─ data_layer.database.batch_writer.BatchDatabaseWriter
+│  │  │
+│  │  ├─ collectors.main_collector.MainCollector (NOT INITIALIZED YET - Line 231 TODO)
+│  │  ├─ collectors.rgb_collector.RGBCollector (NOT INITIALIZED YET - Line 231 TODO)
+│  │  ├─ collectors.phase_collector.PhaseCollector (NOT INITIALIZED YET - Line 231 TODO)
+│  │  │
+│  │  ├─ agents.betting_agent.BettingAgent (NOT INITIALIZED YET - Line 243 TODO)
+│  │  └─ agents.session_keeper.SessionKeeper (NOT INITIALIZED YET - Line 243 TODO)
+│  │
+│  ├─ core.communication.event_bus.EventBus
+│  └─ data_layer.database.batch_writer.BatchDatabaseWriter
+│
+├─ gui.setup_dialog.SetupDialog
+│  └─ core.capture.region_manager.RegionManager
+│
+├─ gui.stats_widgets
+│  ├─ DataCollectorStats ← REFACTORED FAZA I
+│  ├─ RGBCollectorStats ← REFACTORED FAZA I
+│  ├─ BettingAgentStats ← REFACTORED FAZA I
+│  └─ SessionKeeperStats ← REFACTORED FAZA I
+│
+├─ gui.tools_tab.ToolsTab
+│
+├─ core.communication.event_bus (EventSubscriber, EventType)
+├─ core.capture.region_manager.RegionManager ← REFACTORED (Middle not Center)
+└─ utils.logger.AviatorLogger
+
+================================================================================
+KEY OBSERVATIONS:
+================================================================================
+
+1. COLLECTORS & AGENTS NOT INITIALIZED IN WORKER! ✅ TODO MARKERS
+   - Line 231: init_collectors() is empty (TODO)
+   - Line 243: init_agents() is empty (TODO)
+   - This means Data Collector WILL NOT WORK until these are implemented!
+
+2. OCR INTEGRATION ✅ FIXED
+   - bookmaker_worker.py now uses OCREngine (not direct Tesseract/Template)
+   - OCRMethod selected from config.settings.OCR.method
+   - CNN support added via cnn_ocr.py
+
+3. HARDCODED PATHS IN app_controller.py (Line 84-94)
+   - 'data/databases/main_game_data.db' (should use PATH.main_game_db)
+   - 'data/databases/betting_history.db' (should use PATH.betting_history_db)
+   - 'data/databases/rgb_training_data.db' (should use PATH.rgb_training_db)
+
+4. TENSORFLOW INSTALLED ✅
+   - Version 2.20.0
+   - Protobuf warnings (non-critical)
+
+================================================================================

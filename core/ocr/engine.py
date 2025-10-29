@@ -1,5 +1,5 @@
 # core/ocr/engine.py
-# VERSION: 1.0 - COMPLETE
+# VERSION: 2.0 - REFACTORED: CNN Integration + OCRMethod from settings
 # PURPOSE: Glavni OCR engine sa multiple strategijama
 
 import cv2
@@ -9,15 +9,9 @@ import logging
 import time
 from typing import Optional, Dict, Any
 from pathlib import Path
-from enum import IntEnum
 
-from config import GamePhase, OCRConfig, OCR
-
-class OCRMethod(IntEnum):
-    """Available OCR methods."""
-    TESSERACT = 1
-    TEMPLATE = 2
-    CNN = 3  # Future
+from config.settings import OCRMethod, OCR
+from core.ocr.cnn_ocr import CNNOCRReader
 
 class OCREngine:
     """
@@ -25,8 +19,13 @@ class OCREngine:
     Automatski bira najbolju metodu za svaki tip podatka.
     """
     
-    def __init__(self, method: OCRMethod = OCRMethod.TESSERACT):
+    def __init__(self, method: OCRMethod = None):
         self.logger = logging.getLogger(self.__class__.__name__)
+
+        # Use method from config if not specified
+        if method is None:
+            method = OCR.method
+
         self.method = method
 
         # Set Tesseract path from config
@@ -40,9 +39,14 @@ class OCREngine:
         # OCR configs
         self.ocr_configs = OCR.tesseract_whitelist
 
-        # Load templates if using template method
+        # CNN reader (lazy init)
+        self.cnn_reader: Optional[CNNOCRReader] = None
+
+        # Load method-specific resources
         if method == OCRMethod.TEMPLATE:
             self._load_templates()
+        elif method == OCRMethod.CNN:
+            self._init_cnn_reader()
 
         # Performance tracking
         self.read_times = []
@@ -72,7 +76,20 @@ class OCREngine:
             self.logger.info(f"Loaded {len(self.digit_templates)} templates")
         else:
             self.logger.warning("Not enough templates for template matching")
-    
+
+    def _init_cnn_reader(self):
+        """Initialize CNN reader with model paths from config."""
+        try:
+            model_paths = {
+                "score": OCR.cnn_score_model,
+                "money": OCR.cnn_money_model
+            }
+            self.cnn_reader = CNNOCRReader(model_paths)
+            self.logger.info("CNN reader initialized")
+        except Exception as e:
+            self.logger.error(f"Failed to initialize CNN reader: {e}")
+            self.cnn_reader = None
+
     def read_score(self, img: np.ndarray) -> Optional[str]:
         """
         Read score from image.
@@ -87,17 +104,19 @@ class OCREngine:
         result = None
         
         try:
-            if self.method == OCRMethod.TEMPLATE and self.template_ready:
+            if self.method == OCRMethod.CNN and self.cnn_reader:
+                result = self.cnn_reader.read_score(img)
+            elif self.method == OCRMethod.TEMPLATE and self.template_ready:
                 result = self._read_with_templates(img, "score")
             else:
                 result = self._read_with_tesseract(img, "score")
-            
+
             # Track performance
             read_time = time.perf_counter() - start_time
             self.read_times.append(read_time)
-            
+
             return result
-            
+
         except Exception as e:
             self.logger.error(f"Error reading score: {e}")
             return None
@@ -113,7 +132,9 @@ class OCREngine:
             Money string (e.g., "1,234.56") or None
         """
         try:
-            if self.method == OCRMethod.TEMPLATE and self.template_ready:
+            if self.method == OCRMethod.CNN and self.cnn_reader:
+                result = self.cnn_reader.read_money(img)
+            elif self.method == OCRMethod.TEMPLATE and self.template_ready:
                 result = self._read_with_templates(img, "money")
             else:
                 result = self._read_with_tesseract(img, "money")

@@ -19,6 +19,7 @@ from collections import deque
 import logging
 from pathlib import Path
 
+from config.settings import PATH
 from orchestration.process_manager import ProcessManager, WorkerConfig
 from orchestration.bookmaker_worker import worker_entry_point
 from core.communication.event_bus import EventBus, EventSubscriber, EventType, Event
@@ -81,15 +82,15 @@ class AppController:
         """
         writer_configs = {
             'main': {
-                'path': 'data/databases/main_game_data.db',
+                'path': PATH.main_game_db,
                 'batch_size': 100
             },
             'betting': {
-                'path': 'data/databases/betting_history.db',
+                'path': PATH.betting_history_db,
                 'batch_size': 50
             },
             'rgb': {
-                'path': 'data/databases/rgb_training_data.db',
+                'path': PATH.rgb_training_db,
                 'batch_size': 100
             }
         }

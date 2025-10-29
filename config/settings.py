@@ -10,6 +10,21 @@ from typing import List
 # Project root directory
 PROJECT_ROOT = Path(__file__).parent.parent.absolute()
 
+
+class OCRMethod(IntEnum):
+    """
+    OCR Method selection.
+
+    Methods:
+    - TESSERACT: Pytesseract OCR (default, fast, accurate for clean text)
+    - TEMPLATE: Template matching (fastest, requires pre-generated templates)
+    - CNN: Convolutional Neural Network (future, trained model from data/models)
+    """
+    TESSERACT = 1
+    TEMPLATE = 2
+    CNN = 3
+
+
 class GamePhase(IntEnum):
     """
     Game phase enumeration.
@@ -108,7 +123,10 @@ class PathConfig:
 
 @dataclass
 class OCRConfig:
-    """OCR configuration for Tesseract."""
+    """OCR configuration for all OCR methods."""
+
+    # OCR Method selection
+    method: OCRMethod = OCRMethod.TESSERACT
 
     # Tesseract executable path (auto-detected if not specified)
     tesseract_cmd: str = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
@@ -126,6 +144,10 @@ class OCRConfig:
     # Template matching thresholds
     template_threshold: float = 0.99  # 99%+ accuracy required
     template_method: int = 5  # cv2.TM_CCOEFF_NORMED
+
+    # CNN model paths (loaded from data/models)
+    cnn_score_model: Path = PROJECT_ROOT / "data" / "models" / "score_cnn.h5"
+    cnn_money_model: Path = PROJECT_ROOT / "data" / "models" / "money_cnn.h5"
 
 
 @dataclass
