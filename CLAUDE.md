@@ -10,6 +10,101 @@ AVIATOR - Multi-bookmaker Aviator game tracking system with OCR, ML predictions,
 
 ---
 
+## 🛠️ DEVELOPMENT COMMANDS
+
+### Running the Application
+```bash
+# Launch GUI Control Panel
+python main.py
+
+# The GUI provides:
+# - Setup bookmaker configuration (grid layout, positions, monitors)
+# - Start/stop workers
+# - View live logs and statistics
+# - Access tools (Region Editor, OCR Testing, etc.)
+```
+
+### Running Tests
+```bash
+# Performance tests (GUI-based, interactive)
+python tests/ocr_performance.py          # Benchmark OCR speed across regions
+python tests/ml_phase_performance.py     # Test ML model inference speed
+
+# Accuracy tests (GUI-based, interactive)
+python tests/ocr_accuracy.py             # Validate OCR accuracy
+python tests/ml_phase_accuracy.py        # Test ML phase detection accuracy
+
+# Note: Tests use PySide6 GUI - they are INTERACTIVE, not pytest-based
+# Each test provides visual feedback and detailed statistics
+```
+
+### Utility Tools (Direct Execution or via GUI Tools Tab)
+```bash
+# Region Editor - Edit screen region coordinates
+python utils/region_editor.py
+# Interactive GUI tool to adjust bookmaker screen regions
+
+# Region Visualizer - Preview all configured regions
+python utils/region_visualizer.py
+# Shows visual overlay of all regions for verification
+
+# Quick Test - Test coordinate calculations
+python utils/quick_test.py
+
+# Diagnostic Tool - System health check
+python utils/diagnostic.py
+# Verifies Tesseract installation, monitor setup, etc.
+```
+
+### Configuration Files
+```bash
+# Static configs (version-controlled)
+config/static/screen_regions.json   # Screen region coordinates
+config/static/bookmakers.json       # Bookmaker definitions
+config/static/ml_models.json        # ML model configurations
+config/static/stylus_css.json       # GUI styling
+
+# User configs (NOT in Git)
+config/user/betting_agent.json      # Betting strategy settings
+config/user/last_setup.json         # Last used bookmaker setup
+config/user/bookmaker_presets.json  # User-defined presets
+
+# Settings module (programmatic access)
+from config.settings import PATH, OCR, COLLECT, BETTING, LOGGING
+# PATH - All file paths (databases, configs, logs, models)
+# OCR - Tesseract configuration (oem, psm, whitelists, templates)
+# COLLECT - Collection intervals and batch sizes
+# BETTING - Bet amounts, auto-stop limits, timing
+# LOGGING - Log file settings and format
+```
+
+### First-Time Setup
+```bash
+# 1. Prerequisites
+# - Python 3.11+ (tested on 3.13)
+# - Tesseract OCR installed: https://github.com/UB-Mannheim/tesseract/wiki
+#   Default path: C:\Program Files\Tesseract-OCR\tesseract.exe
+#   Verify: tesseract --version
+
+# 2. Install dependencies
+pip install -r requirements.txt
+
+# 3. Launch and configure
+python main.py
+# Click "⚙️ Setup Config"
+# Select monitor, grid layout (GRID 2×2, 2×3, etc.)
+# Add bookmakers and assign to grid positions
+# Save configuration
+# Click "START" to begin
+
+# 4. Verify setup
+# Use Tools → Region Visualizer to preview regions
+# Use Tools → OCR Performance Test to validate OCR speed
+# Check logs for any initialization errors
+```
+
+---
+
 ## 🔄 MANDATORY WORKFLOW
 
 **CRITICAL:** This is the WORKFLOW you MUST follow for EVERY task. Not following this workflow is unacceptable.
@@ -525,19 +620,84 @@ class BookmakerWorker:
 - `RegionManager`: Core class that:
   - Detects monitors using MSS
   - Loads region configurations from JSON
-  - Calculates dynamic coordinates for different layouts (2x2, 2x3, 2x4)
+  - Calculates dynamic coordinates for different grid layouts
   - Transforms base regions to specific grid positions
+
+---
+
+### GRID SYSTEM - Position Naming & Coordinates
+
+**CRITICAL: Grid naming convention (v4.0+)**
+
+```python
+# Available grids (from config.settings.AVAILABLE_GRIDS)
+"GRID 2×2"  # 4 bookmakers (2 rows × 2 columns)
+"GRID 2×3"  # 6 bookmakers (2 rows × 3 columns)
+"GRID 2×4"  # 8 bookmakers (2 rows × 4 columns)
+"GRID 3×3"  # 9 bookmakers (3 rows × 3 columns)
+"GRID 3×4"  # 12 bookmakers (3 rows × 4 columns)
+```
+
+**Position Naming Logic:**
+
+RegionManager generates human-readable position names dynamically:
+- **Rows:** `[Top, Middle, Middle 1, Middle 2, ..., Bottom]`
+- **Columns:** `[Left, Middle, Middle 1, Middle 2, ..., Right]`
+- **Combined:** `"{Row}-{Column}"` (e.g., "Top-Left", "Bottom-Middle")
+
+**Examples:**
+
+```python
+# GRID 2×2 (4 positions)
+positions = ["Top-Left", "Top-Right", "Bottom-Left", "Bottom-Right"]
+# Matrix coordinates: (row, col)
+# Top-Left: (0, 0), Top-Right: (0, 1)
+# Bottom-Left: (1, 0), Bottom-Right: (1, 1)
+
+# GRID 2×3 (6 positions)
+positions = ["Top-Left", "Top-Middle", "Top-Right",
+             "Bottom-Left", "Bottom-Middle", "Bottom-Right"]
+# Top-Left: (0, 0), Top-Middle: (0, 1), Top-Right: (0, 2)
+# Bottom-Left: (1, 0), Bottom-Middle: (1, 1), Bottom-Right: (1, 2)
+
+# GRID 3×3 (9 positions)
+positions = ["Top-Left", "Top-Middle", "Top-Right",
+             "Middle-Left", "Middle-Middle", "Middle-Right",
+             "Bottom-Left", "Bottom-Middle", "Bottom-Right"]
+# Middle row uses "Middle" (singular) when only one middle row
+
+# GRID 3×4 (12 positions)
+positions = ["Top-Left", "Top-Middle 1", "Top-Middle 2", "Top-Right",
+             "Middle-Left", "Middle-Middle 1", "Middle-Middle 2", "Middle-Right",
+             "Bottom-Left", "Bottom-Middle 1", "Bottom-Middle 2", "Bottom-Right"]
+# Multiple middle columns use "Middle 1", "Middle 2", etc.
+```
 
 **Key Methods:**
 ```python
-RegionManager.get_region(region_name, position, layout, monitor)
-    # Returns Region with calculated coordinates for specific bookmaker position
+from core.capture.region_manager import RegionManager
 
-RegionManager.get_all_regions_for_position(position, layout, monitor)
-    # Returns all regions for one bookmaker
+manager = RegionManager()
 
-RegionManager.get_bookmaker_regions(bookmaker_name, bookmaker_config)
-    # Returns all regions based on bookmaker's config
+# Get all position names for a grid (dynamically generated)
+positions_map = manager.generate_position_names("GRID 2×3")
+# Returns: {"Top-Left": (0, 0), "Top-Middle": (0, 1), ...}
+
+# Get pixel offsets for all positions in a grid
+offsets = manager.calculate_layout_offsets("GRID 2×3", "primary")
+# Returns: {"Top-Left": (0, 0), "Top-Middle": (640, 0), ...}
+
+# Get a specific region with calculated coordinates
+region = manager.get_region("score", position="Top-Middle", layout="GRID 2×3")
+# Returns: Region(score: 640,0 380x130)
+
+# Get all regions for one bookmaker position
+regions = manager.get_all_regions_for_position("Top-Left", "GRID 2×2", "primary")
+# Returns: {"score": Region(...), "my_money": Region(...), ...}
+
+# Get all regions for a bookmaker (from bookmaker config)
+regions = manager.get_bookmaker_regions("Admiral", bookmaker_config)
+# Returns: Dict[str, Region]
 ```
 
 **Usage in Worker:**
@@ -548,7 +708,11 @@ worker = BookmakerWorker(
 )
 ```
 
-**Important:** RegionManager is used ONCE during initialization in GUI/setup, then coordinates are passed as plain dicts to workers.
+**Important:**
+- RegionManager is used ONCE during initialization in GUI/setup
+- Coordinates are calculated and passed as plain dicts to workers
+- Position names are human-readable for GUI ("Top-Left")
+- Matrix coordinates are tuples for algorithms ((0, 0))
 
 ---
 

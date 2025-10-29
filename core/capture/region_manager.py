@@ -7,7 +7,7 @@ This module handles:
 - Multi-monitor setup detection
 - Dynamic coordinate calculation based on monitor configuration
 - Flexible GRID layout system (GRID 2×3, GRID 3×4, etc.)
-- Human-readable position names (Top-Left, Bottom-Center)
+- Human-readable position names (Top-Left, Bottom-Middle)
 - Region coordinate transformation for different screen positions
 """
 
@@ -100,7 +100,7 @@ class RegionManager:
     Features:
     - Auto-detects monitor configuration
     - Flexible GRID system (GRID 2×2, GRID 2×3, GRID 2×4, GRID 3×3, GRID 3×4)
-    - Human-readable position names (Top-Left, Center 1-Center 2, Bottom-Right)
+    - Human-readable position names (Top-Left, Middle 1-Middle 2, Bottom-Right)
     - Dynamic position generation on-the-fly
     - Handles dual/triple monitor setups
     - Transforms base regions to specific grid positions
@@ -194,8 +194,8 @@ class RegionManager:
 
         Logic:
         - 2 rows: [Top, Bottom]
-        - 3 rows: [Top, Center, Bottom]
-        - 4+ rows: [Top, Center 1, Center 2, ..., Bottom]
+        - 3 rows: [Top, Middle, Bottom]
+        - 4+ rows: [Top, Middle 1, Middle 2, ..., Bottom]
 
         Args:
             rows: Number of rows
@@ -209,16 +209,16 @@ class RegionManager:
         if rows == 2:
             return ["Top", "Bottom"]
 
-        # 3+ rows: Top, Center(s), Bottom
+        # 3+ rows: Top, Middle(s), Bottom
         names = ["Top"]
 
         # Middle rows
         middle_count = rows - 2
         if middle_count == 1:
-            names.append("Center")
+            names.append("Middle")
         else:
             for i in range(1, middle_count + 1):
-                names.append(f"Center {i}")
+                names.append(f"Middle {i}")
 
         names.append("Bottom")
         return names
@@ -229,8 +229,8 @@ class RegionManager:
 
         Logic:
         - 2 cols: [Left, Right]
-        - 3 cols: [Left, Center, Right]
-        - 4+ cols: [Left, Center 1, Center 2, ..., Right]
+        - 3 cols: [Left, Middle, Right]
+        - 4+ cols: [Left, Middle 1, Middle 2, ..., Right]
 
         Args:
             cols: Number of columns
@@ -244,16 +244,16 @@ class RegionManager:
         if cols == 2:
             return ["Left", "Right"]
 
-        # 3+ cols: Left, Center(s), Right
+        # 3+ cols: Left, Middle(s), Right
         names = ["Left"]
 
         # Middle columns
         middle_count = cols - 2
         if middle_count == 1:
-            names.append("Center")
+            names.append("Middle")
         else:
             for i in range(1, middle_count + 1):
-                names.append(f"Center {i}")
+                names.append(f"Middle {i}")
 
         names.append("Right")
         return names
@@ -266,16 +266,16 @@ class RegionManager:
             grid_name: "GRID 2×3"
 
         Returns:
-            {"Top-Left": (0, 0), "Top-Center": (0, 1), "Top-Right": (0, 2), ...}
+            {"Top-Left": (0, 0), "Top-Middle": (0, 1), "Top-Right": (0, 2), ...}
 
         Example:
             >>> generate_position_names("GRID 2×3")
             {
                 "Top-Left": (0, 0),
-                "Top-Center": (0, 1),
+                "Top-Middle": (0, 1),
                 "Top-Right": (0, 2),
                 "Bottom-Left": (1, 0),
-                "Bottom-Center": (1, 1),
+                "Bottom-Middle": (1, 1),
                 "Bottom-Right": (1, 2)
             }
         """
@@ -304,7 +304,7 @@ class RegionManager:
         Convert human-readable position to matrix coordinates.
 
         Args:
-            position: "Top-Left", "Center 1-Center 2", etc.
+            position: "Top-Left", "Middle 1-Middle 2", etc.
             grid_name: "GRID 2×3"
 
         Returns:
@@ -438,10 +438,10 @@ class RegionManager:
             For "GRID 2×3" on a 1920x1080 monitor:
             {
                 "Top-Left": (0, 0),
-                "Top-Center": (640, 0),
+                "Top-Middle": (640, 0),
                 "Top-Right": (1280, 0),
                 "Bottom-Left": (0, 540),
-                "Bottom-Center": (640, 540),
+                "Bottom-Middle": (640, 540),
                 "Bottom-Right": (1280, 540)
             }
         """
@@ -533,7 +533,7 @@ class RegionManager:
 
         Args:
             region_name: Name of region from config (e.g., "score_region_small")
-            position: Grid position (e.g., "Top-Left", "Bottom-Center")
+            position: Grid position (e.g., "Top-Left", "Bottom-Middle")
             layout: Grid layout ("GRID 2×3", "GRID 3×4", etc.)
             target_monitor: Monitor to use ("primary", "left", "right")
 
@@ -541,7 +541,7 @@ class RegionManager:
             Region object with calculated coordinates
 
         Example:
-            >>> manager.get_region("score_region_small", position="Top-Center", layout="GRID 2×3")
+            >>> manager.get_region("score_region_small", position="Top-Middle", layout="GRID 2×3")
             Region(score_region_small: 1088,399 380x130)
         """
         # Get base region from config
@@ -581,7 +581,7 @@ class RegionManager:
         Get all regions for a specific bookmaker position.
 
         Args:
-            position: Grid position (e.g., "Top-Left", "Bottom-Center")
+            position: Grid position (e.g., "Top-Left", "Bottom-Middle")
             layout: Grid layout ("GRID 2×3", etc.)
             target_monitor: Monitor to use
 
@@ -624,11 +624,11 @@ class RegionManager:
             Dictionary of all regions for this bookmaker
 
         Example:
-            >>> config = {"position": "TC", "layout": "layout_6", "monitor": "primary"}
+            >>> config = {"position": "Top-Middle", "layout": "GRID 2×3", "monitor": "primary"}
             >>> regions = manager.get_bookmaker_regions("Mozzart", config)
         """
         position = bookmaker_config.get("position", "TL")
-        layout = bookmaker_config.get("layout", "layout_6")
+        layout = bookmaker_config.get("layout", "GRID 2×3")
         monitor = bookmaker_config.get("monitor", "primary")
 
         return self.get_all_regions_for_position(position, layout, monitor)
@@ -664,7 +664,7 @@ class RegionManager:
                 pos_name = self.matrix_to_position(row, col, layout)
                 x, y = offsets[pos_name]
                 # Use shorter display format for positions
-                display_name = pos_name.replace("Top-", "T-").replace("Bottom-", "B-").replace("Center", "C")
+                display_name = pos_name.replace("Top-", "T-").replace("Bottom-", "B-").replace("Middle", "M")
                 row_positions.append(f"[{display_name:12s}:{x:5d},{y:4d}]")
             lines.append(" ".join(row_positions))
 
@@ -705,11 +705,11 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
 
     manager = RegionManager()
-    print(manager.visualize_layout("layout_6", "primary"))
+    print(manager.visualize_layout("GRID 2×3", "primary"))
 
     # Test region retrieval
-    region = manager.get_region("score_region_small", "TC", "layout_6")
-    print(f"\nScore region at TC position: {region}")
+    region = manager.get_region("score_region_small", "Top-Middle", "GRID 2×3")
+    print(f"\nScore region at Top-Middle position: {region}")
 
     # Show stats
     stats = manager.get_stats()
