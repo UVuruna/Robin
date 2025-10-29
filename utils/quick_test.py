@@ -104,7 +104,7 @@ def test_coordinate_calculation():
         manager = RegionManager()
 
         # Test layout offset calculation
-        test_layout = "layout_6"
+        test_layout = "GRID 2×3"
         test_position = "TC"
 
         print(f"\nTesting: {test_layout} @ {test_position}")
@@ -147,7 +147,7 @@ def test_all_combinations():
     try:
         manager = RegionManager()
 
-        layouts = ["layout_4", "layout_6", "layout_8"]
+        layouts = ["layout_4", "GRID 2×3", "layout_8"]
         test_results = []
 
         for layout in layouts:

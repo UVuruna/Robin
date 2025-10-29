@@ -9,14 +9,11 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
 from typing import Dict, List
 import json
-from config.settings import PATH
+from config.settings import PATH, AVAILABLE_GRIDS
 from core.capture.region_manager import RegionManager
 
 class ToolsTab(QWidget):
     """Tools tab - ULTRA COMPACT version with collapsible sections."""
-
-    # Available layouts
-    AVAILABLE_LAYOUTS = ["layout_4", "layout_6", "layout_8"]
 
     def __init__(self, config: Dict = None):
         super().__init__()
@@ -103,7 +100,7 @@ class ToolsTab(QWidget):
         row1 = QHBoxLayout()
         row1.addWidget(QLabel("Layout:"))
         self.layout_combo = QComboBox()
-        self.layout_combo.addItems(self.AVAILABLE_LAYOUTS)
+        self.layout_combo.addItems(AVAILABLE_GRIDS)
         self.layout_combo.currentTextChanged.connect(self.on_layout_changed)
         row1.addWidget(self.layout_combo, 1)
 
@@ -167,13 +164,14 @@ class ToolsTab(QWidget):
 
     def _get_positions_for_layout(self, layout: str) -> List[str]:
         """Get position names for a given layout."""
-        if layout == "layout_4":
-            return self.region_manager.LAYOUT_4_POSITIONS.copy()
-        elif layout == "layout_6":
-            return self.region_manager.LAYOUT_6_POSITIONS.copy()
-        elif layout == "layout_8":
-            return self.region_manager.LAYOUT_8_POSITIONS.copy()
-        return []
+        try:
+            positions = self.region_manager.generate_position_names(layout)
+            # Add "ALL" option for visualizer
+            position_list = list(positions.keys())
+            position_list.append("ALL")
+            return position_list
+        except ValueError:
+            return []
 
     def update_bookmaker_grid(self):
         if self.bookmaker_grid is None:
@@ -191,22 +189,17 @@ class ToolsTab(QWidget):
             return
 
         try:
-            num_positions = int(layout_name.split("_")[1])
-        except:
-            num_positions = 6
+            _, cols = self.region_manager.parse_grid_format(layout_name)
+        except ValueError:
+            return
 
-        rows = 2
-        cols = num_positions // 2
+        # Get positions (without "ALL")
+        all_positions = self._get_positions_for_layout(layout_name)
+        positions = [p for p in all_positions if p != "ALL"]
 
-        positions = self._get_positions_for_layout(layout_name)
-        if not positions:
-            positions = [""] * num_positions
-
-        for i in range(num_positions):
+        for i, pos_label in enumerate(positions):
             row = i // cols
             col = i % cols
-
-            pos_label = positions[i] if i < len(positions) else f"P{i+1}"
 
             # Create horizontal layout for label + combo
             container = QWidget()

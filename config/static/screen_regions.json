@@ -1,34 +1,8 @@
 {
   "metadata": {
-    "version": "2.0.0",
-    "last_updated": "2025-10-28",
-    "description": "Screen regions configuration with RGB colors (not BGR!)"
-  },
-  "layouts": {
-    "layout_4": {
-      "TL": {"left": 0, "top": 0},
-      "TR": {"left": 1920, "top": 0},
-      "BL": {"left": 0, "top": 1044},
-      "BR": {"left": 1920, "top": 1044}
-    },
-    "layout_6": {
-      "TL": {"left": 0, "top": 0},
-      "TC": {"left": 1280, "top": 0},
-      "TR": {"left": 2560, "top": 0},
-      "BL": {"left": 0, "top": 1044},
-      "BC": {"left": 1280, "top": 1044},
-      "BR": {"left": 2560, "top": 1044}
-    },
-    "layout_8": {
-      "TL": {"left": 0, "top": 0},
-      "TCL": {"left": 960, "top": 0},
-      "TCR": {"left": 1920, "top": 0},
-      "TR": {"left": 2880, "top": 0},
-      "BL": {"left": 0, "top": 1044},
-      "BCL": {"left": 960, "top": 1044},
-      "BCR": {"left": 1920, "top": 1044},
-      "BR": {"left": 2880, "top": 1044}
-    }
+    "version": "3.0.0",
+    "last_updated": "2025-10-29",
+    "description": "Screen regions configuration with RGB colors - GRID system (layouts calculated dynamically)"
   },
   "region_colors": {
     "score_region_small": [0, 255, 0],

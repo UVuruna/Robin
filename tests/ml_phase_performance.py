@@ -368,5 +368,5 @@ class MLPhaseSpeedDialog(QDialog):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    dialog = MLPhaseSpeedDialog("layout_6", "TL", False)
+    dialog = MLPhaseSpeedDialog("GRID 2×3", "Top-Left", False)
     sys.exit(dialog.exec())

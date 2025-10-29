@@ -244,8 +244,13 @@ class SetupDialog(QDialog):
 
     def _get_all_positions(self) -> List[str]:
         """Get all available positions from all layouts."""
-        # Combine all layout positions (layout_8 has all positions)
-        return self.region_manager.LAYOUT_8_POSITIONS.copy()
+        # Get positions from largest grid (GRID 3×4 has 12 positions)
+        try:
+            positions = self.region_manager.generate_position_names("GRID 3×4")
+            return list(positions.keys())
+        except:
+            # Fallback
+            return []
 
     def load_from_config(self):
         """Load values from existing config."""

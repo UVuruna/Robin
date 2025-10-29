@@ -275,14 +275,8 @@ class RegionVisualizerDialog(QDialog):
 
             offset_x, offset_y = offsets[self.position]
 
-            if "layout_4" in self.layout:
-                width, height = 1920, 1044
-            elif "layout_6" in self.layout:
-                width, height = 1280, 1044
-            elif "layout_8" in self.layout:
-                width, height = 960, 1044
-            else:
-                width, height = 1280, 1044
+            # Get cell dimensions dynamically
+            width, height = self.region_manager.get_cell_dimensions(self.layout, self.target_monitor)
 
             with mss.mss() as sct:
                 monitor = {"left": offset_x, "top": offset_y, "width": width, "height": height}
@@ -502,9 +496,9 @@ if __name__ == "__main__":
     print("REGION VISUALIZER v9.0 - JSON Colors + Fixed Middle Button")
     print("=" * 70)
 
-    layout = input("Enter layout (layout_4/layout_6/layout_8): ").strip()
-    position = input("Enter position (TL/TR/BL/BR/TC/BC/etc or ALL): ").strip()
-    target_monitor = input("Target monitor (primary/left/right): ").strip() or "primary"
+    layout = input("Enter layout (GRID 2×2/GRID 2×3/GRID 2×4/GRID 3×3/GRID 3×4): ").strip()
+    position = input("Enter position (Top-Left/Bottom-Right/etc or ALL): ").strip()
+    target_monitor = input("Target monitor (primary/left/right/center): ").strip() or "primary"
 
     app = QApplication(sys.argv)
     dialog = RegionVisualizerDialog(layout, position, target_monitor)

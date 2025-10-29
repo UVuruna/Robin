@@ -547,9 +547,9 @@ if __name__ == "__main__":
     print("REGION EDITOR - Console Mode")
     print("=" * 70)
 
-    layout = input("Enter layout (layout_4/layout_6/layout_8): ").strip()
-    position = input("Enter position (TL/TR/BL/BR/TC/BC/etc): ").strip()
-    target_monitor = input("Target monitor (primary/left/right/center_1): ").strip() or "primary"
+    layout = input("Enter layout (GRID 2×2/GRID 2×3/GRID 2×4/GRID 3×3/GRID 3×4): ").strip()
+    position = input("Enter position (Top-Left/Bottom-Right/etc): ").strip()
+    target_monitor = input("Target monitor (primary/left/right/center): ").strip() or "primary"
 
     app = QApplication(sys.argv)
     dialog = RegionEditorDialog(layout, position, target_monitor)

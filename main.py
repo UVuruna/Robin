@@ -92,7 +92,7 @@ class AviatorControlPanel(QMainWindow):
             'betting_agent': betting_data,
             'bookmaker_presets': presets_data,
             'bookmakers': last_setup_data.get('last_setup', {}).get('bookmakers', []) if last_setup_data.get('last_setup') else [],
-            'layout': last_setup_data.get('tools_last', {}).get('layout', 'layout_6'),
+            'layout': last_setup_data.get('tools_last', {}).get('layout', 'GRID 2×3'),
             'target_monitor': last_setup_data.get('last_setup', {}).get('target_monitor', 'primary') if last_setup_data.get('last_setup') else 'primary'
         }
 
@@ -333,7 +333,7 @@ class AviatorControlPanel(QMainWindow):
         
         # Calculate coordinates for each bookmaker
         bookmakers_config = []
-        layout = self.config.get("layout", "layout_6")
+        layout = self.config.get("layout", "GRID 2×3")
         target_monitor = self.config.get("target_monitor", "primary")
 
         for bm in self.config.get("bookmakers", []):

@@ -348,5 +348,5 @@ class SpeedBenchmarkDialog(QDialog):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    dialog = SpeedBenchmarkDialog("layout_6", "TL", False)
+    dialog = SpeedBenchmarkDialog("GRID 2×3", "Top-Left", False)
     sys.exit(dialog.exec())

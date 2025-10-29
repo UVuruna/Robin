@@ -36,14 +36,14 @@ class ConfigManager:
                 "last_setup": None,
                 "session_keeper": {"interval": 600},
                 "tools_setup": {
-                    "layout": "layout_6",
-                    "position": "TL",
+                    "layout": "GRID 2×3",
+                    "position": "Top-Left",
                     "dual_monitor": True,
                     "bookmakers": {}
                 },
                 "tools_last": {
-                    "layout": "layout_6",
-                    "position": "TL",
+                    "layout": "GRID 2×3",
+                    "position": "Top-Left",
                     "dual_monitor": True,
                     "preset": "main"
                 }
@@ -59,7 +59,7 @@ class ConfigManager:
 
         # bookmaker_presets.json
         if not self.bookmaker_presets_file.exists():
-            default_presets = {"layout_6": {"main": {}, "secondary": {}}}
+            default_presets = {"GRID 2×3": {"main": {}, "secondary": {}}}
             self._save_json(self.bookmaker_presets_file, default_presets)
             self.logger.info("Created default bookmaker_presets.json")
 

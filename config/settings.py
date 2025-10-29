@@ -40,6 +40,16 @@ class BetState(IntEnum):
     ACTIVE = 2  # Red - Bet placed, waiting for round to Start
 
 
+# Grid layout configurations
+AVAILABLE_GRIDS = [
+    "GRID 2×2",
+    "GRID 2×3",
+    "GRID 2×4",
+    "GRID 3×3",
+    "GRID 3×4",
+]
+
+
 @dataclass
 class PathConfig:
     """Path configuration for all data directories."""
