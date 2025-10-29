@@ -1,5 +1,8 @@
 # tests/ocr_performance.py
-# VERSION: 3.0 - ULTRA COMPACT + DUAL MODE (Time/Iterations)
+# VERSION: 4.0 - GRID SYSTEM + FIXED OCR CLASSES
+# CHANGES:
+# - Updated to use ScreenCapture + OCREngine (not ScreenReader)
+# - Updated for GRID system
 
 import sys
 from pathlib import Path
@@ -15,6 +18,9 @@ from PySide6.QtGui import QFont
 import time
 from typing import Dict
 
+from core.capture.screen_capture import ScreenCapture
+from core.ocr.engine import OCREngine, OCRMethod
+
 class SpeedBenchmarkWorker(QThread):
     progress = Signal(int)
     log = Signal(str)
@@ -25,7 +31,7 @@ class SpeedBenchmarkWorker(QThread):
         super().__init__()
         self.layout = layout
         self.position = position
-        self.target_monitor = dual_monitor
+        self.target_monitor = target_monitor
         self.mode = mode  # "time" or "iterations"
         self.value = value
         self.selected_regions = selected_regions
@@ -86,27 +92,34 @@ class SpeedBenchmarkWorker(QThread):
                     continue
 
                 try:
-                    reader = ScreenReader(coords[region_name])
+                    # Initialize capture and OCR
+                    capture = ScreenCapture()
+                    ocr = OCREngine(method=OCRMethod.TESSERACT)
 
                     times = []
                     start_time = time.perf_counter()
                     iterations = 0
-                    
-                    # OPTIMIZOVANO - method reference (BRZO):
-                    # Odaberi metodu PRE petlje
-                    read_method = {
-                        "score": reader.read_score,
-                        "money": reader.read_money,
-                        "player_count": reader.read_player_count
+
+                    # OPTIMIZED - method reference (FAST):
+                    # Select method BEFORE loop
+                    ocr_method = {
+                        "score": ocr.read_score,
+                        "money": ocr.read_money,
+                        "player_count": ocr.read_player_count
                     }.get(region_type)
-                    
+
                     if self.mode == "time":
                         # Time-based: run for N seconds
                         while True:
                             iter_start = time.perf_counter()
-                            _ = read_method()
+
+                            # Capture and read
+                            img = capture.capture_region(coords[region_name])
+                            if img is not None:
+                                _ = ocr_method(img)
+
                             end_iter = time.perf_counter()
-                            
+
                             iter_time = (end_iter - iter_start) * 1_000
                             times.append(iter_time)
                             iterations += 1
@@ -118,18 +131,23 @@ class SpeedBenchmarkWorker(QThread):
                     else:
                         # Iteration-based: run N iterations
                         for _ in range(self.value):
-                            
+
                             iter_start = time.perf_counter()
-                            _ = read_method()
+
+                            # Capture and read
+                            img = capture.capture_region(coords[region_name])
+                            if img is not None:
+                                _ = ocr_method(img)
+
                             end_iter = time.perf_counter()
-                            
+
                             iter_time = (end_iter - iter_start) * 1_000
                             times.append(iter_time)
                             iterations += 1
 
                         elapsed = time.perf_counter() - start_time
 
-                    reader.close()
+                    capture.cleanup()
 
                     if times:
                         avg_time = sum(times) / len(times)
@@ -183,7 +201,7 @@ class SpeedBenchmarkDialog(QDialog):
         super().__init__(parent)
         self.layout = layout
         self.position = position
-        self.target_monitor = dual_monitor
+        self.target_monitor = target_monitor
         self.worker = None
 
         self.setWindowTitle(f"Speed Benchmark - {layout} @ {position}")
@@ -263,16 +281,16 @@ class SpeedBenchmarkDialog(QDialog):
         self.results_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.results_table.setAlternatingRowColors(True)
         table_layout.addWidget(self.results_table)
-        layout.addWidget(table_group)
+        layout.addWidget(table_group)  # No stretch - table takes only needed space
 
         log_group = QGroupBox("Test Log")
         log_layout = QVBoxLayout(log_group)
         self.log_text = QTextEdit()
         self.log_text.setReadOnly(True)
-        self.log_text.setMaximumHeight(150)
+        # Removed setMaximumHeight - let it expand with stretch factor
         self.log_text.setStyleSheet("background-color: #1e1e1e; color: #d4d4d4; font-family: Consolas; font-size: 9pt;")
         log_layout.addWidget(self.log_text)
-        layout.addWidget(log_group)
+        layout.addWidget(log_group, 1)  # Stretch factor 1 - log expands to fill remaining space
 
         btn_layout = QHBoxLayout()
         self.run_btn = QPushButton("▶ Run Benchmark")

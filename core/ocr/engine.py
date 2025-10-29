@@ -11,7 +11,7 @@ from typing import Optional, Dict, Any
 from pathlib import Path
 from enum import IntEnum
 
-from config import GamePhase, OCRConfig
+from config import GamePhase, OCRConfig, OCR
 
 class OCRMethod(IntEnum):
     """Available OCR methods."""
@@ -28,23 +28,26 @@ class OCREngine:
     def __init__(self, method: OCRMethod = OCRMethod.TESSERACT):
         self.logger = logging.getLogger(self.__class__.__name__)
         self.method = method
-        
+
+        # Set Tesseract path from config
+        pytesseract.pytesseract.tesseract_cmd = OCR.tesseract_cmd
+
         # Template matching setup
         self.templates_dir = Path("data/ocr_templates")
         self.digit_templates: Dict[str, np.ndarray] = {}
         self.template_ready = False
-        
+
         # OCR configs
         self.ocr_configs = OCR.tesseract_whitelist
-        
+
         # Load templates if using template method
         if method == OCRMethod.TEMPLATE:
             self._load_templates()
-        
+
         # Performance tracking
         self.read_times = []
         self.accuracy_scores = []
-        
+
         self.logger.info(f"Initialized with method: {method.name}")
     
     def _load_templates(self):
@@ -206,12 +209,12 @@ class OCREngine:
             # Get whitelist for this data type
             whitelist = self.ocr_configs.get(data_type, "")
             
-            # Tesseract config
+            # Tesseract config - simple like old screen_reader
             config = f'--oem {OCR.oem} --psm {OCR.psm}'
             if whitelist:
                 config += f' -c tessedit_char_whitelist={whitelist}'
-            
-            # OCR
+
+            # OCR - OEM 0 doesn't need lang parameter
             text = pytesseract.image_to_string(processed, config=config)
             
             # Clean result
@@ -310,37 +313,29 @@ class OCREngine:
     
     def _preprocess_image(self, img: np.ndarray, data_type: str) -> np.ndarray:
         """
-        Preprocess image for OCR based on data type.
-        
+        Simple preprocessing from working screen_reader.py.
+        Steps: grayscale -> invert -> Otsu threshold
+
         Args:
-            img: Input image
-            data_type: Type of data
-            
+            img: Input image (BGR)
+            data_type: Type of data (ignored, same preprocessing for all)
+
         Returns:
-            Preprocessed image
+            Binary image
         """
         # Convert to grayscale
         if len(img.shape) == 3:
             gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         else:
             gray = img.copy()
-        
-        # Apply different preprocessing based on data type
-        if data_type == "score":
-            # Score has good contrast, minimal processing
-            _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-            return binary
-            
-        elif data_type == "money":
-            # Money might need denoising
-            denoised = cv2.fastNlMeansDenoising(gray, None, 10, 7, 21)
-            _, binary = cv2.threshold(denoised, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-            return binary
-            
-        else:
-            # Default processing
-            _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-            return binary
+
+        # INVERT - white text on dark background
+        gray = cv2.bitwise_not(gray)
+
+        # Otsu threshold
+        _, binary = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+        return binary
     
     def _is_valid_number(self, text: str) -> bool:
         """Check if text is valid number format."""

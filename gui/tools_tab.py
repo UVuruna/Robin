@@ -31,7 +31,7 @@ class ToolsTab(QWidget):
     def _load_bookmakers(self):
         """Load all bookmakers from config."""
         try:
-            with open(PATH.bookmaker_config, "r") as f:
+            with open(PATH.bookmakers, "r") as f:
                 data = json.load(f)
             bookmakers_set = set()
             for group in data.get("server_groups", []):
@@ -153,7 +153,6 @@ class ToolsTab(QWidget):
         positions = self._get_positions_for_layout(layout)
         if positions:
             self.position_combo.addItems(positions)
-        self.position_combo.addItem("ALL")
 
         # Update grid
         if self.bookmaker_grid is not None:
@@ -235,10 +234,10 @@ class ToolsTab(QWidget):
         self.preset_combo.addItem("(select)")
 
         try:
-            with open(PATH.config, "r") as f:
+            with open(PATH.bookmaker_presets, "r") as f:
                 config = json.load(f)
             
-            presets = config.get("bookmaker_presets", {}).get(layout, {})
+            presets = config.get(layout, {})
             for preset_name in presets.keys():
                 self.preset_combo.addItem(preset_name)
 
@@ -257,10 +256,10 @@ class ToolsTab(QWidget):
             return
 
         try:
-            with open(PATH.config, "r") as f:
+            with open(PATH.bookmaker_presets, "r") as f:
                 config = json.load(f)
 
-            preset = config.get("bookmaker_presets", {}).get(layout, {}).get(preset_name)
+            preset = config.get(layout, {}).get(preset_name)
             if preset:
                 for pos, bookmaker in preset.items():
                     if pos in self.bookmaker_checkboxes:
@@ -292,33 +291,40 @@ class ToolsTab(QWidget):
             return
 
         try:
-            # Load config
-            if PATH.config.exists():
-                with open(PATH.config, "r") as f:
-                    config = json.load(f)
+            # Load presets
+            if PATH.bookmaker_presets.exists():
+                with open(PATH.bookmaker_presets, "r") as f:
+                    presets = json.load(f)
             else:
-                config = {}
+                presets = {}
 
-            # Create structure
-            if "bookmaker_presets" not in config:
-                config["bookmaker_presets"] = {}
-            if layout not in config["bookmaker_presets"]:
-                config["bookmaker_presets"][layout] = {}
+            # Create layout structure if needed
+            if layout not in presets:
+                presets[layout] = {}
 
             # Save preset
-            config["bookmaker_presets"][layout][preset_name] = bookmakers
+            presets[layout][preset_name] = bookmakers
 
-            # Save last used
-            config["tools_last"] = {
+            # Write presets
+            with open(PATH.bookmaker_presets, "w") as f:
+                json.dump(presets, f, indent=2)
+
+            # Save tools_last to last_setup.json
+            if PATH.last_setup.exists():
+                with open(PATH.last_setup, "r") as f:
+                    last_setup = json.load(f)
+            else:
+                last_setup = {}
+
+            last_setup["tools_last"] = {
                 "layout": layout,
                 "position": self.position_combo.currentText(),
                 "target_monitor": self.monitor_combo.currentData(),
                 "preset": preset_name,
             }
 
-            # Write
-            with open(PATH.config, "w") as f:
-                json.dump(config, f, indent=2)
+            with open(PATH.last_setup, "w") as f:
+                json.dump(last_setup, f, indent=2)
 
             QMessageBox.information(self, "Success", f"Preset '{preset_name}' saved!")
             self.update_preset_combo()
@@ -329,7 +335,11 @@ class ToolsTab(QWidget):
     def load_last_config(self):
         """Load last used config."""
         try:
-            with open(PATH.config, "r") as f:
+            # Load from last_setup.json, not bookmaker_presets.json
+            if not PATH.last_setup.exists():
+                return
+
+            with open(PATH.last_setup, "r") as f:
                 config = json.load(f)
 
             last = config.get("tools_last", {})

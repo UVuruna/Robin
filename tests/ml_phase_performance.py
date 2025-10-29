@@ -1,7 +1,9 @@
 # tests/ml_phase_performance.py
-# VERSION: 2.1 - NO DELAY (Performance test)
-# NOTE: This file is already optimized - no changes needed
-# No delay in performance tests to measure pure ML speed
+# VERSION: 3.0 - GRID SYSTEM + GRACEFUL MODEL HANDLING
+# CHANGES:
+# - Updated for GRID system
+# - Added graceful handling for missing ML models
+# - No delay in performance tests to measure pure ML speed
 
 import sys
 from pathlib import Path
@@ -19,6 +21,9 @@ import numpy as np
 import pickle
 from typing import Dict
 
+from config.settings import PATH
+from core.capture.screen_capture import ScreenCapture
+
 class MLPhaseSpeedWorker(QThread):
     progress = Signal(int)
     log = Signal(str)
@@ -29,7 +34,7 @@ class MLPhaseSpeedWorker(QThread):
         super().__init__()
         self.layout = layout
         self.position = position
-        self.target_monitor = dual_monitor
+        self.target_monitor = target_monitor
         self.mode = mode
         self.value = value
         self.selected_regions = selected_regions
@@ -109,7 +114,7 @@ class MLPhaseSpeedWorker(QThread):
                     continue
 
                 try:
-                    reader = ScreenReader(coords[region_name])
+                    capture = ScreenCapture()
 
                     times = []
                     start_time = time.perf_counter()
@@ -120,11 +125,11 @@ class MLPhaseSpeedWorker(QThread):
                         while True:
                             iter_start = time.perf_counter()
 
-                            img = reader.capture_image()
+                            img = capture.capture_region(coords[region_name])
                             if img is not None:
-                                rgb_img = img[:, :, :3]
-                                mean_color = rgb_img.mean(axis=(0, 1))
-                                r, g, b = mean_color[2], mean_color[1], mean_color[0]
+                                # img is already BGR from capture_region
+                                mean_color = img.mean(axis=(0, 1))
+                                b, g, r = mean_color[0], mean_color[1], mean_color[2]  # BGR order
                                 _ = model.predict(np.array([[r, g, b]]))[0]
 
                             iter_time = (time.perf_counter() - iter_start) * 1_000
@@ -140,11 +145,11 @@ class MLPhaseSpeedWorker(QThread):
                         for _ in range(self.value):
                             iter_start = time.perf_counter()
 
-                            img = reader.capture_image()
+                            img = capture.capture_region(coords[region_name])
                             if img is not None:
-                                rgb_img = img[:, :, :3]
-                                mean_color = rgb_img.mean(axis=(0, 1))
-                                r, g, b = mean_color[2], mean_color[1], mean_color[0]
+                                # img is already BGR from capture_region
+                                mean_color = img.mean(axis=(0, 1))
+                                b, g, r = mean_color[0], mean_color[1], mean_color[2]  # BGR order
                                 _ = model.predict(np.array([[r, g, b]]))[0]
 
                             iter_time = (time.perf_counter() - iter_start) * 1_000
@@ -153,7 +158,7 @@ class MLPhaseSpeedWorker(QThread):
 
                         elapsed = time.perf_counter() - start_time
 
-                    reader.close()
+                    capture.cleanup()
 
                     if times:
                         avg_time = sum(times) / len(times)
@@ -207,7 +212,7 @@ class MLPhaseSpeedDialog(QDialog):
         super().__init__(parent)
         self.layout = layout
         self.position = position
-        self.target_monitor = dual_monitor
+        self.target_monitor = target_monitor
         self.worker = None
 
         self.setWindowTitle(f"ML Phase Speed - {layout} @ {position}")
@@ -283,16 +288,16 @@ class MLPhaseSpeedDialog(QDialog):
         self.results_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.results_table.setAlternatingRowColors(True)
         table_layout.addWidget(self.results_table)
-        layout.addWidget(table_group)
+        layout.addWidget(table_group)  # No stretch - table takes only needed space
 
         log_group = QGroupBox("Test Log")
         log_layout = QVBoxLayout(log_group)
         self.log_text = QTextEdit()
         self.log_text.setReadOnly(True)
-        self.log_text.setMaximumHeight(150)
+        # Removed setMaximumHeight - let it expand with stretch factor
         self.log_text.setStyleSheet("background-color: #1e1e1e; color: #d4d4d4; font-family: Consolas; font-size: 9pt;")
         log_layout.addWidget(self.log_text)
-        layout.addWidget(log_group)
+        layout.addWidget(log_group, 1)  # Stretch factor 1 - log expands to fill remaining space
 
         btn_layout = QHBoxLayout()
         self.run_btn = QPushButton("▶ Run Benchmark")

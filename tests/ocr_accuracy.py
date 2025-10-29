@@ -1,6 +1,8 @@
 # tests/ocr_accuracy.py
-# VERSION: 5.0 - CONFIGURABLE DELAY + METHOD CACHE
+# VERSION: 6.0 - GRID SYSTEM + FIXED OCR CLASSES
 # CHANGES:
+# - Updated to use ScreenCapture + OCREngine (not ScreenReader)
+# - Updated for GRID system
 # - Added delay_ms spinner (0-1000ms, default 0ms for static tests)
 # - Method reference extracted before loop (no if/elif overhead)
 
@@ -16,6 +18,9 @@ from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QFont
 import time
 
+from core.capture.screen_capture import ScreenCapture
+from core.ocr.engine import OCREngine, OCRMethod
+
 class OCRTestWorker(QThread):
     progress = Signal(int)
     log = Signal(str)
@@ -26,7 +31,7 @@ class OCRTestWorker(QThread):
         super().__init__()
         self.layout = layout
         self.position = position
-        self.target_monitor = dual_monitor
+        self.target_monitor = target_monitor
         self.iterations = iterations
         self.delay_ms = delay_ms
         self.selected_regions = selected_regions
@@ -91,28 +96,36 @@ class OCRTestWorker(QThread):
                     continue
 
                 try:
-                    reader = ScreenReader(coords[region_name])
+                    # Initialize capture and OCR
+                    capture = ScreenCapture()
+                    ocr = OCREngine(method=OCRMethod.TESSERACT)
 
                     # OPTIMIZED: Extract method reference BEFORE loop!
-                    read_method = {
-                        "score": reader.read_score,
-                        "money": reader.read_money,
-                        "player_count": reader.read_player_count
+                    ocr_method = {
+                        "score": ocr.read_score,
+                        "money": ocr.read_money,
+                        "player_count": ocr.read_player_count
                     }.get(region_type)
 
-                    if not read_method:
+                    if not ocr_method:
                         self.log.emit(f"  ❌ Unknown region type: {region_type}")
                         continue
 
                     readings = []
                     for _ in range(self.iterations):
-                        value = read_method()  # Direct call, no if/elif!
-                        readings.append(value)
-                        
+                        # Capture screen region
+                        img = capture.capture_region(coords[region_name])
+                        if img is None:
+                            readings.append(None)
+                        else:
+                            # Read from image
+                            value = ocr_method(img)  # Direct call, no if/elif!
+                            readings.append(value)
+
                         if delay_sec > 0:
                             time.sleep(delay_sec)
 
-                    reader.close()
+                    capture.cleanup()
 
                     non_none = [r for r in readings if r is not None]
                     successful_reads = len(non_none)
@@ -189,7 +202,7 @@ class OCRTestDialog(QDialog):
         super().__init__(parent)
         self.layout = layout
         self.position = position
-        self.target_monitor = dual_monitor
+        self.target_monitor = target_monitor
         self.worker = None
 
         self.setWindowTitle(f"OCR Test - {layout} @ {position}")
@@ -273,7 +286,7 @@ class OCRTestDialog(QDialog):
         self.log_text.setReadOnly(True)
         self.log_text.setStyleSheet("background-color: #1e1e1e; color: #d4d4d4; font-family: Consolas; font-size: 10pt;")
         log_layout.addWidget(self.log_text)
-        layout.addWidget(log_group)
+        layout.addWidget(log_group, 1)  # Stretch factor 1 - expands to fill space
 
         btn_layout = QHBoxLayout()
         self.run_btn = QPushButton("▶ Run Test")

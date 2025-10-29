@@ -1,6 +1,8 @@
 # tests/ml_phase_accuracy.py
-# VERSION: 3.0 - CONFIGURABLE DELAY + METHOD CACHE
+# VERSION: 4.0 - GRID SYSTEM + GRACEFUL MODEL HANDLING
 # CHANGES:
+# - Updated for GRID system
+# - Added graceful handling for missing ML models
 # - Added delay_ms spinner (0-1000ms, default 0ms)
 # - Removed hardcoded time.sleep(0.05)
 
@@ -18,17 +20,20 @@ import time
 import numpy as np
 import pickle
 
+from config.settings import PATH
+from core.capture.screen_capture import ScreenCapture
+
 class MLPhaseTestWorker(QThread):
     progress = Signal(int)
     log = Signal(str)
     finished = Signal(dict)
 
-    def __init__(self, layout: str, position: str, target_monitor: str, 
+    def __init__(self, layout: str, position: str, target_monitor: str,
                  iterations: int, delay_ms: int, selected_regions: dict):
         super().__init__()
         self.layout = layout
         self.position = position
-        self.target_monitor = dual_monitor
+        self.target_monitor = target_monitor
         self.iterations = iterations
         self.delay_ms = delay_ms
         self.selected_regions = selected_regions
@@ -116,19 +121,18 @@ class MLPhaseTestWorker(QThread):
                     continue
 
                 try:
-                    reader = ScreenReader(coords[region_name])
+                    capture = ScreenCapture()
 
                     predictions = []
                     for _ in range(self.iterations):
-                        img = reader.capture_image()
+                        img = capture.capture_region(coords[region_name])
                         if img is None:
                             predictions.append(None)
                             continue
 
-                        # RGB and predict
-                        rgb_img = img[:, :, :3]
-                        mean_color = rgb_img.mean(axis=(0, 1))
-                        r, g, b = mean_color[2], mean_color[1], mean_color[0]  # BGR to RGB
+                        # RGB and predict (img is already BGR from capture_region)
+                        mean_color = img.mean(axis=(0, 1))
+                        b, g, r = mean_color[0], mean_color[1], mean_color[2]  # BGR order from OpenCV
 
                         prediction = model.predict(np.array([[r, g, b]]))
                         cluster = prediction[0]
@@ -142,7 +146,7 @@ class MLPhaseTestWorker(QThread):
                         if delay_sec > 0:
                             time.sleep(delay_sec)
 
-                    reader.close()
+                    capture.cleanup()
 
                     non_none = [p for p in predictions if p is not None]
                     successful_reads = len(non_none)
@@ -221,7 +225,7 @@ class MLPhaseTestDialog(QDialog):
         super().__init__(parent)
         self.layout = layout
         self.position = position
-        self.target_monitor = dual_monitor
+        self.target_monitor = target_monitor
         self.worker = None
 
         self.setWindowTitle(f"ML Phase Test - {layout} @ {position}")
@@ -297,7 +301,7 @@ class MLPhaseTestDialog(QDialog):
         self.log_text.setReadOnly(True)
         self.log_text.setStyleSheet("background-color: #1e1e1e; color: #d4d4d4; font-family: Consolas; font-size: 10pt;")
         log_layout.addWidget(self.log_text)
-        layout.addWidget(log_group)
+        layout.addWidget(log_group, 1)  # Stretch factor 1 - expands to fill space
 
         btn_layout = QHBoxLayout()
         self.run_btn = QPushButton("▶ Run Test")

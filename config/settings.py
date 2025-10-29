@@ -113,8 +113,8 @@ class OCRConfig:
     # Tesseract executable path (auto-detected if not specified)
     tesseract_cmd: str = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
-    oem: int = 0  # OCR Engine Mode (0 = Legacy, 3 = Default)
-    psm: int = 8  # Page Segmentation Mode (8 = single word, 7 = single line)
+    oem: int = 3  # OCR Engine Mode (3 = Default - works without lang when whitelist used)
+    psm: int = 7  # Page Segmentation Mode (7 = single line)
 
     # Whitelists for different region types
     tesseract_whitelist = {
