@@ -1,0 +1,8 @@
+# Ignore all user preference files
+*
+
+# Except this .gitignore file itself
+!.gitignore
+
+# Except README if we add one
+!README.md

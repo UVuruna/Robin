@@ -10,6 +10,104 @@ AVIATOR - Multi-bookmaker Aviator game tracking system with OCR, ML predictions,
 
 ---
 
+## 🔄 MANDATORY WORKFLOW
+
+**CRITICAL:** This is the WORKFLOW you MUST follow for EVERY task. Not following this workflow is unacceptable.
+
+### PHASE 1: BEFORE STARTING WORK - ASK QUESTIONS
+
+Before writing ANY code or making ANY changes, you MUST:
+
+1. **Read the task carefully** - Understand what is being asked
+2. **Identify ambiguities** - What is unclear? What could be interpreted multiple ways?
+3. **Ask questions** - NEVER assume, ALWAYS verify:
+   - "Should I modify existing file X or create new one?"
+   - "You mentioned Y - did you mean Z or something else?"
+   - "I see three approaches (A, B, C) - which one do you prefer?"
+   - "Should I update tests/docs as well?"
+4. **Propose approach** - Explain HOW you will solve it, get confirmation
+5. **Only after user confirms** → Start work
+
+**Why this matters:**
+- Prevents wasted work on wrong assumptions
+- Catches misunderstandings early
+- Ensures we're solving the RIGHT problem
+
+**Example:**
+```
+User: "Fix the layout logic"
+
+WRONG Response:
+✗ "I'll refactor the layout code..." [starts coding immediately]
+
+CORRECT Response:
+✓ "Before I start, let me clarify:
+   1. Do you want me to remove hardcoded if/elif checks?
+   2. Should I centralize layout config in one place?
+   3. Are you planning to add new layouts (layout_10, layout_12)?
+   4. Should I update all 15 files that reference layout, or focus on core logic first?
+   [waits for answers before starting]"
+```
+
+---
+
+### PHASE 2: AFTER COMPLETING WORK - VERIFY COMPLIANCE
+
+After finishing ANY task, you MUST perform explicit **Rule Compliance Check**:
+
+#### Compliance Checklist:
+
+**✅ RULE #0: NEVER LIE**
+- [ ] Did I provide specific file paths and line numbers?
+- [ ] Did I show actual before/after code changes?
+- [ ] Did I give concrete evidence for all claims?
+
+**✅ RULE #1: NO VERSION SUFFIXES**
+- [ ] Did I edit existing files directly (not create _v2, _new, _backup)?
+- [ ] Are all filenames clean without version numbers?
+
+**✅ RULE #2: NEVER DELETE WITHOUT VERIFICATION**
+- [ ] If I deleted code, did I search/verify it's not used elsewhere?
+- [ ] Did I ask user before removing seemingly obsolete code?
+
+**✅ RULE #3: NO HARDCODED VALUES**
+- [ ] Did I check for hardcoded dimensions, paths, colors, timeouts?
+- [ ] Are all config values loaded from JSON or settings.py?
+- [ ] Did I use PATH constants instead of string literals?
+
+**✅ RULE #4: NO BACKWARD COMPATIBILITY**
+- [ ] Did I update ALL callers when refactoring?
+- [ ] Did I avoid creating wrapper methods "for compatibility"?
+
+**✅ RULE #5: NO DEFENSIVE PROGRAMMING FOR IMPOSSIBLE SCENARIOS**
+- [ ] Did I add checks only for REAL threats (external input, I/O)?
+- [ ] Did I avoid checking for impossible scenarios (data validated in __init__)?
+
+**⚠️ SUSPICIOUS ITEMS - ASK USER:**
+- List anything that seems questionable
+- Example: "I added a new method X - is this the right design?"
+- Example: "I noticed Y is duplicated in 3 places - should we refactor?"
+
+**📊 FINAL REPORT FORMAT:**
+```
+## 🔍 RULE COMPLIANCE VERIFICATION
+
+✅ RULE #0: [Compliant/Issue found]
+✅ RULE #1: [Compliant/Issue found]
+✅ RULE #2: [Compliant/Issue found]
+✅ RULE #3: [Compliant/Issue found]
+✅ RULE #4: [Compliant/Issue found]
+✅ RULE #5: [Compliant/Issue found]
+
+⚠️ QUESTIONS FOR USER:
+1. [Any suspicious items]
+2. [Any design concerns]
+
+✅ OVERALL STATUS: [COMPLIANT / ISSUES FOUND]
+```
+
+---
+
 ## 🚨 ABSOLUTE DEVELOPMENT RULES
 
 ### RULE #0: NEVER LIE
@@ -67,6 +165,163 @@ Before deleting ANY code:
 ```
 
 **Rule:** Better 100 questions than 1 deleted core feature.
+
+---
+
+### RULE #3: NO HARDCODED VALUES - ALWAYS USE CONFIGURATION
+
+**CRITICAL:** Before hardcoding ANY value, ASK: "Will this be used in multiple places? Should this be configurable?"
+
+❌ **FORBIDDEN:**
+```python
+# WRONG - Hardcoded colors
+REGION_COLORS = {
+    "score_region": (0, 255, 0),
+    "my_money": (255, 0, 0)
+}
+
+# WRONG - Hardcoded paths
+json_file = Path("data/json/config.json")
+
+# WRONG - Hardcoded configuration
+TIMEOUT = 30
+MAX_RETRIES = 3
+```
+
+✅ **REQUIRED:**
+```python
+# RIGHT - Load from JSON
+from config.settings import PATH
+with open(PATH.screen_regions) as f:
+    region_colors = json.load(f)["region_colors"]
+
+# RIGHT - Use PATH constants
+json_file = PATH.screen_regions
+
+# RIGHT - Use config classes
+from config.settings import BETTING
+timeout = BETTING.lock_timeout
+```
+
+**Configuration hierarchy:**
+1. **config/static/** - Version-controlled configuration (screen regions, bookmakers, ML models)
+2. **config/settings.py** - PATH constants and runtime config classes
+3. **config/user/** - User-specific settings (NOT in Git)
+
+**When to hardcode:**
+- Constants that NEVER change: `PI = 3.14159`, `MAX_INT = 2**31`
+- Implementation details: loop counters, temporary values
+- Development-only debugging values (with clear comment)
+
+**Golden rule:** If you're about to type a literal value (string, number, dict), ask: "Should this be in a JSON file or settings.py?"
+
+---
+
+### RULE #4: NO BACKWARD COMPATIBILITY - REFACTOR PROPERLY
+
+**CRITICAL:** When refactoring, ALWAYS update ALL callers. NEVER add "backward compatibility" wrappers!
+
+❌ **FORBIDDEN - "Backward Compatibility":**
+```python
+# WRONG - Adding wrapper method to avoid fixing callers
+def load_config(self):  # "backward compatibility"
+    """Old method that combines new split methods."""
+    return {
+        'betting': self.get_betting_agent_config(),
+        'last_setup': self.get_last_setup()
+    }
+```
+
+✅ **REQUIRED - Proper Refactoring:**
+```python
+# Step 1: Remove old method completely
+# OLD: config = manager.load_config()
+
+# Step 2: Update ALL callers to use new methods
+betting = manager.get_betting_agent_config()
+last_setup = manager.get_last_setup()
+```
+
+**Why "backward compatibility" is BAD:**
+- Creates **technical debt** - old code never gets updated
+- Hides the need for refactoring
+- Makes codebase confusing (multiple ways to do same thing)
+- Accumulates cruft over time
+
+**Refactoring procedure:**
+1. Search for ALL callers: `Grep pattern="old_method\("`
+2. Update EACH caller to use new API
+3. Delete old method completely
+4. Test that nothing calls old method anymore
+
+**Exception:** NEVER. No exceptions. If you refactor, refactor EVERYTHING.
+
+**Golden rule:** If you're tempted to add "backward compatibility" → You're doing refactoring WRONG.
+
+---
+
+### RULE #5: NO DEFENSIVE PROGRAMMING FOR IMPOSSIBLE SCENARIOS
+
+**CRITICAL:** Before adding try/except blocks or defensive checks, ASK: "Can this scenario actually happen?"
+
+❌ **FORBIDDEN - Defensive Code for Impossible Scenarios:**
+```python
+# WRONG - Checking for impossible scenario
+def _calculate_preview_bounds(self):
+    if not self.coords:  # ← Impossible! Always set in __init__
+        return 0, 0, 1280, 1044  # Hardcoded fallback!
+
+    # Process coords...
+
+# WRONG - Catching exceptions that can't happen
+try:
+    value = self.required_attribute  # Always exists after __init__
+except AttributeError:
+    value = default_value  # Dead code!
+```
+
+✅ **REQUIRED - Trust Your Initialization:**
+```python
+# RIGHT - No check needed if truly impossible
+def _calculate_preview_bounds(self):
+    # self.coords is GUARANTEED to exist after _load_coords() in __init__
+    # Process coords directly...
+
+# RIGHT - Document requirements instead
+def process_data(self, data: Dict):
+    """Process data.
+
+    Args:
+        data: Non-empty dictionary (validated by caller)
+    """
+    # Trust that caller validated data
+    return data["required_key"]
+```
+
+**When defensive code IS appropriate:**
+- External input (user input, file I/O, network requests)
+- Cross-process communication (multiprocessing, IPC)
+- Public API boundaries (library interfaces)
+- Known edge cases from production logs
+
+**When defensive code is NOT appropriate:**
+- Internal method calls within same class
+- Data that's validated in __init__
+- Scenarios that would indicate a programming bug (not runtime error)
+
+**Decision procedure:**
+1. **ASK:** "What conditions would cause this scenario?"
+2. **TRACE:** Can those conditions actually occur given the code flow?
+3. **VERIFY:** If unsure, ASK the user before adding defensive code
+4. **DOCUMENT:** If truly impossible, add comment explaining why no check is needed
+
+**Why avoid defensive programming for impossible scenarios:**
+- Hides bugs instead of exposing them
+- Adds unnecessary code complexity
+- Creates hardcoded fallback values (violates RULE #3)
+- Suggests lack of confidence in the code structure
+
+**Golden rule:** If the scenario is impossible, let it fail loudly. Defensive code should defend against REAL threats, not imaginary ones.
 
 ---
 
@@ -455,11 +710,10 @@ class YourAgent:
 
 ### On Session Start - ALWAYS Read These Files FIRST:
 ```
-1. CLAUDE.md (this file) - Core principles
+1. CLAUDE.md (this file) - Core principles and workflow
 2. ARCHITECTURE.md - Detailed system design
 3. README.md - Project overview
 4. CHANGELOG.md - Recent changes
-5. project_knowledge.md - Project-specific patterns
 ```
 
 ### Critical: ASK BEFORE CODING
@@ -557,13 +811,14 @@ class YourAgent:
 
 ## REMEMBER ALWAYS
 
-1. **Data Accuracy > Speed** - Better slow and correct than fast and wrong
-2. **Worker Process Parallelism** - 1 Bookmaker = 1 Process = 1 CPU Core
-3. **Batch Everything** - Never single operations (50-100x faster)
-4. **Shared Writers per TYPE** - Not per worker (massive efficiency gain)
-5. **Closure Pattern** - Agents access local_state via closures (no multiprocessing overhead)
-6. **Event-Driven GUI** - EventBus for loose coupling
-7. **Atomic Transactions** - All-or-nothing for betting
-8. **Update Docs** - Always update CHANGELOG.md after work
-9. **Verify Dependencies** - Check impact on related files
-10. **ASK When Unsure** - Better 100 questions than 1 broken feature
+1. **MANDATORY WORKFLOW** - ASK questions before work, VERIFY compliance after work
+2. **Data Accuracy > Speed** - Better slow and correct than fast and wrong
+3. **Worker Process Parallelism** - 1 Bookmaker = 1 Process = 1 CPU Core
+4. **Batch Everything** - Never single operations (50-100x faster)
+5. **Shared Writers per TYPE** - Not per worker (massive efficiency gain)
+6. **Closure Pattern** - Agents access local_state via closures (no multiprocessing overhead)
+7. **Event-Driven GUI** - EventBus for loose coupling
+8. **Atomic Transactions** - All-or-nothing for betting
+9. **Update Docs** - Always update CHANGELOG.md after work
+10. **Verify Dependencies** - Check impact on related files
+11. **ASK When Unsure** - Better 100 questions than 1 broken feature

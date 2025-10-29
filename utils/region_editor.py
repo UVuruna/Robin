@@ -1,5 +1,5 @@
 # utils/region_editor.py
-# VERSION: 8.0 - Improved keys + arrows + better navigation
+# VERSION: 9.0 - RGB colors from JSON, new config paths
 
 import sys
 from pathlib import Path
@@ -24,6 +24,7 @@ import cv2
 import mss
 import json
 import traceback
+from config.settings import PATH
 
 class RegionEditorDialog(QDialog):
     """Region Editor - saves RELATIVE coordinates."""
@@ -44,21 +45,7 @@ class RegionEditorDialog(QDialog):
         "auto_play_coords_2",
     ]
 
-    REGION_COLORS = {
-        "score_region_small": (0, 255, 0),
-        "score_region_medium": (0, 255, 255),
-        "score_region_large": (0, 128, 255),
-        "my_money_region": (255, 0, 0),
-        "other_count_region": (255, 0, 255),
-        "other_money_region": (255, 255, 0),
-        "phase_region": (128, 0, 128),
-        "play_amount_coords_1": (0, 0, 255),
-        "play_button_coords_1": (255, 128, 0),
-        "auto_play_coords_1": (128, 255, 0),
-        "play_amount_coords_2": (0, 128, 128),
-        "play_button_coords_2": (128, 128, 255),
-        "auto_play_coords_2": (255, 255, 128),
-    }
+    # Region colors are loaded from JSON - NO HARD-CODED COLORS!
 
     def __init__(self, layout: str, position: str, target_monitor: str, parent=None):
         super().__init__(parent)
@@ -70,13 +57,15 @@ class RegionEditorDialog(QDialog):
         self.position = position
         self.target_monitor = target_monitor
 
-        self.coords_file = Path("data/json/screen_regions.json")
+        self.coords_file = PATH.screen_regions
         self.coords = {}
+        self.region_colors_rgb = {}  # RGB colors from JSON
         self.current_region_index = 0
         self.shift_pressed = False
+        self.ctrl_pressed = False
         self.position_offset = None
-        self.preview_width = 1280
-        self.preview_height = 1044
+        self.preview_padding = 50  # Padding around regions
+        # preview_width and preview_height calculated dynamically based on regions
 
         self.setWindowTitle(f"Region Editor - {layout} @ {position}")
         self.setWindowFlags(Qt.WindowType.Window)
@@ -130,6 +119,12 @@ class RegionEditorDialog(QDialog):
                     for key in self.REGION_KEYS
                 }
 
+            # Load region colors from JSON (RGB format - will convert to BGR for OpenCV)
+            if "region_colors" in data and isinstance(data["region_colors"], dict):
+                self.region_colors_rgb = data["region_colors"]
+            else:
+                raise ValueError("region_colors not found in screen_regions.json!")
+
             for key in self.REGION_KEYS:
                 if key not in self.coords:
                     self.coords[key] = {
@@ -162,14 +157,10 @@ class RegionEditorDialog(QDialog):
             offset_x, offset_y = offsets[self.position]
             self.position_offset = {"left": offset_x, "top": offset_y}
 
-            if "layout_4" in self.layout:
-                self.preview_width, self.preview_height = 1920, 1044
-            elif "layout_6" in self.layout:
-                self.preview_width, self.preview_height = 1280, 1044
-            elif "layout_8" in self.layout:
-                self.preview_width, self.preview_height = 960, 1044
-            else:
-                self.preview_width, self.preview_height = 1280, 1044
+            # Get cell dimensions dynamically from RegionManager
+            self.preview_width, self.preview_height = manager.get_cell_dimensions(
+                self.layout, self.target_monitor
+            )
 
         except Exception as e:
             error_msg = f"Failed to get position offset: {e}"
@@ -202,23 +193,21 @@ class RegionEditorDialog(QDialog):
 
         self.current_region_label = QLabel(f"Current: {self.REGION_KEYS[0]}")
         self.current_region_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.current_region_label.setStyleSheet(
-            "color: white; background-color: #4CAF50; "
-            "font-weight: bold; font-size: 11pt; padding: 8px; border-radius: 4px;"
-        )
+        self._update_region_label_color(self.REGION_KEYS[0])  # Set initial color from JSON
         left_layout.addWidget(self.current_region_label)
 
+        # LOG SECTION
         log_group = QGroupBox("📋 Log")
         log_layout = QVBoxLayout(log_group)
         self.log_text = QTextEdit()
         self.log_text.setReadOnly(True)
-        self.log_text.setMaximumHeight(150)
+        self.log_text.setMinimumHeight(150)
         self.log_text.setStyleSheet(
             "background-color: #1e1e1e; color: #d4d4d4; "
             "font-family: Consolas; font-size: 9pt;"
         )
         log_layout.addWidget(self.log_text)
-        left_layout.addWidget(log_group)
+        left_layout.addWidget(log_group, 1)
 
         self.save_close_btn = QPushButton("💾 Save and Close")
         self.save_close_btn.setMinimumHeight(45)
@@ -249,7 +238,8 @@ class RegionEditorDialog(QDialog):
 
         preview_title = QLabel("📸 Live Preview")
         preview_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        preview_title.setStyleSheet("font-size: 11pt; font-weight: bold; padding: 5px;")
+        preview_title.setStyleSheet("font-size: 10pt; font-weight: bold; padding: 2px;")
+        preview_title.setMaximumHeight(30)
         right_layout.addWidget(preview_title)
 
         self.preview_label = QLabel()
@@ -257,7 +247,7 @@ class RegionEditorDialog(QDialog):
         self.preview_label.setStyleSheet(
             "background-color: #2b2b2b; border: 2px solid #555;"
         )
-        self.preview_label.setMinimumSize(800, 600)
+        self.preview_label.setMinimumSize(600, 400)  # Smaller minimum for cropped view
         right_layout.addWidget(self.preview_label)
 
         main_layout.addWidget(left_panel)
@@ -269,11 +259,12 @@ class RegionEditorDialog(QDialog):
         layout = QVBoxLayout(group)
 
         text = """
-<b style="color:#4CAF50;">MOVE:</b> W/A/S/D or Arrow Keys<br>
-<b style="color:#2196F3;">RESIZE:</b> I/K (height), J/L (width)<br>
-<b style="color:#FF9800;">NEXT:</b> M or Tab<br>
-<b style="color:#FF9800;">PREV:</b> N or Alt+Tab<br>
-<b style="color:#F44336;">SHIFT:</b> + key = 10px steps
+            <b style="color:#4CAF50;">MOVE:</b> W/A/S/D<br>
+            <b style="color:#2196F3;">RESIZE (Increase):</b> Arrow Keys ↑/↓/←/→<br>
+            <b style="color:#2196F3;">RESIZE (Decrease):</b> CTRL + Arrow Keys<br>
+            <b style="color:#FF9800;">NEXT REGION:</b> M or SPACE<br>
+            <b style="color:#FF9800;">PREV REGION:</b> N or SHIFT+SPACE<br>
+            <b style="color:#F44336;">FAST MODE:</b> SHIFT + key = 10 pixel steps
         """
 
         label = QLabel(text)
@@ -289,21 +280,52 @@ class RegionEditorDialog(QDialog):
         scrollbar = self.log_text.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
 
+    def _calculate_preview_bounds(self):
+        """Calculate bounding box for all regions + padding."""
+        # Find min/max coordinates across all regions
+        min_x = min_y = float('inf')
+        max_x = max_y = 0
+
+        for region_name, coords in self.coords.items():
+            if region_name not in self.REGION_KEYS:
+                continue
+
+            x1 = coords["left"]
+            y1 = coords["top"]
+            x2 = x1 + coords["width"]
+            y2 = y1 + coords["height"]
+
+            min_x = min(min_x, x1)
+            min_y = min(min_y, y1)
+            max_x = max(max_x, x2)
+            max_y = max(max_y, y2)
+
+        # Add padding
+        min_x = max(0, min_x - self.preview_padding)
+        min_y = max(0, min_y - self.preview_padding)
+        max_x = max_x + self.preview_padding
+        max_y = max_y + self.preview_padding
+
+        return int(min_x), int(min_y), int(max_x - min_x), int(max_y - min_y)
+
     def update_preview(self):
         """Update live preview - displays RELATIVE coords."""
         try:
             if not self.position_offset:
                 return
 
+            # Calculate dynamic preview bounds based on regions
+            crop_x, crop_y, crop_width, crop_height = self._calculate_preview_bounds()
+
             # position_offset already contains ABSOLUTE coordinates from RegionManager
-            left = self.position_offset["left"]
-            top = self.position_offset["top"]
+            left = self.position_offset["left"] + crop_x
+            top = self.position_offset["top"] + crop_y
 
             monitor = {
                 "left": left,
                 "top": top,
-                "width": self.preview_width,
-                "height": self.preview_height,
+                "width": crop_width,
+                "height": crop_height,
             }
 
             # Use context manager for reliable screenshot
@@ -312,21 +334,25 @@ class RegionEditorDialog(QDialog):
                 img = np.array(screenshot)
                 img = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
 
-            # Draw regions - RELATIVE coordinates
+            # Draw regions - RELATIVE coordinates adjusted for crop
             current_name = self.REGION_KEYS[self.current_region_index]
 
             for region_name, coords in self.coords.items():
                 if region_name not in self.REGION_KEYS:
                     continue
 
-                x1, y1 = coords["left"], coords["top"]
+                # Adjust coordinates relative to cropped image
+                x1 = coords["left"] - crop_x
+                y1 = coords["top"] - crop_y
                 x2 = x1 + coords["width"]
                 y2 = y1 + coords["height"]
 
-                color = self.REGION_COLORS.get(region_name, (255, 255, 255))
+                # Get RGB color from JSON and convert to BGR for OpenCV
+                rgb = self.region_colors_rgb.get(region_name, [255, 255, 255])
+                bgr = (rgb[2], rgb[1], rgb[0])  # RGB → BGR for cv2.rectangle()
                 thickness = 5 if region_name == current_name else 2
 
-                cv2.rectangle(img, (x1, y1), (x2, y2), color, thickness)
+                cv2.rectangle(img, (x1, y1), (x2, y2), bgr, thickness)
 
                 # Draw cross at center
                 center_x = (x1 + x2) // 2
@@ -337,14 +363,14 @@ class RegionEditorDialog(QDialog):
                     img,
                     (center_x - cross_size, center_y),
                     (center_x + cross_size, center_y),
-                    color,
+                    bgr,
                     2,
                 )
                 cv2.line(
                     img,
                     (center_x, center_y - cross_size),
                     (center_x, center_y + cross_size),
-                    color,
+                    bgr,
                     2,
                 )
 
@@ -358,7 +384,7 @@ class RegionEditorDialog(QDialog):
                     (x1, max(y1 - 5, 15)),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     0.5,
-                    color,
+                    bgr,  # Use bgr variable defined above
                     1,
                     cv2.LINE_AA,
                 )
@@ -367,7 +393,7 @@ class RegionEditorDialog(QDialog):
             img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             h, w, ch = img_rgb.shape
             bytes_per_line = 3 * w
-            q_image = QImage(img_rgb.data, w, h, bytes_per_line, QImage.Format_RGB888)
+            q_image = QImage(img_rgb.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
 
             label_size = self.preview_label.size()
             pixmap = QPixmap.fromImage(q_image).scaled(
@@ -390,41 +416,46 @@ class RegionEditorDialog(QDialog):
         if key == Qt.Key.Key_Shift:
             self.shift_pressed = True
             return
+        
+        elif key == Qt.Key.Key_Control:
+            self.ctrl_pressed = True
+            return
 
         step = 10 if self.shift_pressed else 1
+        size = step * -1 if self.ctrl_pressed else step
         current_name = self.REGION_KEYS[self.current_region_index]
         coords = self.coords[current_name]
 
         changed = False
 
         # MOVE: W/A/S/D or Arrow Keys
-        if key in (Qt.Key.Key_W, Qt.Key.Key_Up):
+        if key == Qt.Key.Key_W:
             coords["top"] -= step
             changed = True
-        elif key in (Qt.Key.Key_S, Qt.Key.Key_Down):
+        elif key == Qt.Key.Key_S:
             coords["top"] += step
             changed = True
-        elif key in (Qt.Key.Key_A, Qt.Key.Key_Left):
+        elif key == Qt.Key.Key_A:
             coords["left"] -= step
             changed = True
-        elif key in (Qt.Key.Key_D, Qt.Key.Key_Right):
+        elif key == Qt.Key.Key_D:
             coords["left"] += step
             changed = True
 
         # RESIZE: I/K/J/L
-        elif key == Qt.Key.Key_I:
-            coords["height"] += step
-            coords["top"] -= step
+        elif key == Qt.Key.Key_Up:
+            coords["height"] = max(10, coords["height"] + size)
+            coords["top"] -= size
             changed = True
-        elif key == Qt.Key.Key_K:
-            coords["height"] = max(10, coords["height"] - step)
-            coords["top"] += step
+        elif key == Qt.Key.Key_Down:
+            coords["height"] = max(10, coords["height"] + size)
             changed = True
-        elif key == Qt.Key.Key_J:
-            coords["width"] = max(10, coords["width"] - step)
+        elif key == Qt.Key.Key_Left:
+            coords["width"] = max(10, coords["width"] + size)
+            coords["left"] -= size
             changed = True
-        elif key == Qt.Key.Key_L:
-            coords["width"] += step
+        elif key == Qt.Key.Key_Right:
+            coords["width"] = max(10, coords["width"] + size)
             changed = True
 
         # NEXT: M or Tab
@@ -452,10 +483,30 @@ class RegionEditorDialog(QDialog):
     def keyReleaseEvent(self, event: QKeyEvent):
         if event.key() == Qt.Key.Key_Shift:
             self.shift_pressed = False
+        
+        elif event.key() == Qt.Key.Key_Control:
+            self.ctrl_pressed = False
+
+    def _update_region_label_color(self, region_name: str):
+        """Update label color dynamically from JSON region_colors (RGB format)."""
+        if region_name not in self.region_colors_rgb:
+            # Fallback to default green if color not found
+            hex_color = "#FFFFFF"
+        else:
+            # Convert RGB list to hex #RRGGBB
+            rgb = self.region_colors_rgb[region_name]
+            hex_color = f"#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}"
+
+        # Update label stylesheet with dynamic color
+        self.current_region_label.setStyleSheet(
+            f"color: black; background-color: {hex_color}; "
+            "font-weight: bold; font-size: 11pt; padding: 8px; border-radius: 4px;"
+        )
 
     def update_current_region_display(self):
         current = self.REGION_KEYS[self.current_region_index]
         self.current_region_label.setText(f"Current: {current}")
+        self._update_region_label_color(current)  # Update color from JSON
         self.log(f"→ Switched to: {current}")
 
     def save_and_close(self):
@@ -485,7 +536,7 @@ class RegionEditorDialog(QDialog):
     def closeEvent(self, event):
         if hasattr(self, "timer"):
             self.timer.stop()
-        if self.sct:
+        if hasattr(self, "sct") and self.sct:
             self.sct.close()
         event.accept()
 

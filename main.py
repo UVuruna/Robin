@@ -60,8 +60,8 @@ class AviatorControlPanel(QMainWindow):
         self.app_controller = AppController()
         self.region_manager = RegionManager()  # For coordinate calculation
 
-        # Load last config
-        self.config = self.config_manager.load_config()
+        # Load config - PROPERLY constructed from new split files
+        self._load_config_from_manager()
 
         self.init_ui()
         self.apply_dark_theme()
@@ -76,6 +76,25 @@ class AviatorControlPanel(QMainWindow):
         self.event_subscriber.subscribe(EventType.ROUND_END, self._on_round_end_event)
         self.event_subscriber.subscribe(EventType.THRESHOLD_CROSSED, self._on_threshold_event)
         self.event_subscriber.subscribe(EventType.DATA_COLLECTED, self._on_data_collected_event)
+
+    def _load_config_from_manager(self):
+        """Load config from split ConfigManager files into unified self.config dict."""
+        last_setup_data = self.config_manager._load_json(self.config_manager.last_setup_file)
+        betting_data = self.config_manager.get_betting_agent_config()
+        presets_data = self.config_manager.get_bookmaker_presets()
+        
+        # Construct unified config dict (for backward compatibility with existing code)
+        self.config = {
+            'last_setup': last_setup_data.get('last_setup'),
+            'session_keeper': last_setup_data.get('session_keeper', {'interval': 600}),
+            'tools_setup': last_setup_data.get('tools_setup', {}),
+            'tools_last': last_setup_data.get('tools_last', {}),
+            'betting_agent': betting_data,
+            'bookmaker_presets': presets_data,
+            'bookmakers': last_setup_data.get('last_setup', {}).get('bookmakers', []) if last_setup_data.get('last_setup') else [],
+            'layout': last_setup_data.get('tools_last', {}).get('layout', 'layout_6'),
+            'target_monitor': last_setup_data.get('last_setup', {}).get('target_monitor', 'primary') if last_setup_data.get('last_setup') else 'primary'
+        }
 
     def init_ui(self):
         """Initialize UI components."""
@@ -481,29 +500,19 @@ class AviatorControlPanel(QMainWindow):
         """Open setup configuration dialog."""
         dialog = SetupDialog(self.config, self)
         if dialog.exec():
-            self.config = dialog.get_config()
+            # Reload config from ConfigManager after dialog changes
+            self._load_config_from_manager()
             QMessageBox.information(
                 self,
                 "Setup Complete",
                 "Configuration updated! Click 'Save Setup' to persist.",
             )
 
-    def save_config(self):
-        """Save current config to file."""
-        if self.config_manager.save_config(self.config):
-            QMessageBox.information(self, "Saved", "Configuration saved to config.json")
-        else:
-            QMessageBox.warning(self, "Error", "Failed to save configuration")
-
-    def load_config(self):
-        """Load config from file."""
-        self.config = self.config_manager.load_config()
-        if self.config:
-            QMessageBox.information(
-                self, "Loaded", "Configuration loaded from config.json"
-            )
-        else:
-            QMessageBox.warning(self, "Error", "No saved configuration found")
+    # Config methods removed - use config_manager directly:
+    # - self.config_manager.get_betting_agent_config()
+    # - self.config_manager.update_betting_agent_config(bet, stop)
+    # - self.config_manager.get_last_setup()
+    # - self.config_manager.update_last_setup(monitor, bookmakers)
 
     # ========================================================================
     # THEME

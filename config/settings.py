@@ -46,38 +46,49 @@ class PathConfig:
 
     # Root directories
     project_root: Path = PROJECT_ROOT
+    config_dir: Path = PROJECT_ROOT / "config"
     data_dir: Path = PROJECT_ROOT / "data"
     logs_dir: Path = PROJECT_ROOT / "logs"
+
+    # Config subdirectories
+    config_static_dir: Path = config_dir / "static"
+    config_user_dir: Path = config_dir / "user"
 
     # Data subdirectories
     database_dir: Path = data_dir / "databases"
     models_dir: Path = data_dir / "models"
-    json_dir: Path = data_dir / "json"
     screenshots_dir: Path = data_dir / "screenshots"
 
-    # Specific files
-    config: Path = json_dir / "config.json"
-    screen_regions: Path = json_dir / "screen_regions.json"
-    bookmaker_config: Path = json_dir / "bookmaker_config.json"
-    video_regions: Path = json_dir / "video_regions.json"
+    # Static config files (version-controlled)
+    screen_regions: Path = config_static_dir / "screen_regions.json"
+    bookmakers: Path = config_static_dir / "bookmakers.json"
+    stylus_css: Path = config_static_dir / "stylus_css.json"
+    ml_models: Path = config_static_dir / "ml_models.json"
+
+    # User config files (NOT in Git)
+    betting_agent_config: Path = config_user_dir / "betting_agent.json"
+    last_setup: Path = config_user_dir / "last_setup.json"
+    bookmaker_presets: Path = config_user_dir / "bookmaker_presets.json"
 
     # Database files
     main_game_db: Path = database_dir / "main_game_data.db"
     rgb_training_db: Path = database_dir / "rgb_training_data.db"
     betting_history_db: Path = database_dir / "betting_history.db"
 
-    # ML models
+    # ML model files
     phase_model: Path = models_dir / "game_phase_kmeans.pkl"
     button_model: Path = models_dir / "bet_button_kmeans.pkl"
 
     def ensure_directories(self):
         """Create all necessary directories."""
         directories = [
+            self.config_dir,
+            self.config_static_dir,
+            self.config_user_dir,
             self.data_dir,
             self.logs_dir,
             self.database_dir,
             self.models_dir,
-            self.json_dir,
             self.screenshots_dir,
         ]
 

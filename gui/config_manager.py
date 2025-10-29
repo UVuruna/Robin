@@ -1,119 +1,124 @@
 # gui/config_manager.py
-# VERSION: 1.0
-# PURPOSE: Manage config.json for GUI
+# VERSION: 2.0 - Split config files (last_setup, betting_agent, bookmaker_presets)
+# PURPOSE: Manage user configuration files
 
 import json
 from config.settings import PATH
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from utils.logger import AviatorLogger
 
 class ConfigManager:
     """
-    Manages configuration file (config.json) for the GUI.
+    Manages user configuration files in config/user/ folder.
 
-    Config structure:
-    {
-        "last_setup": {
-            "layout": "layout_6",
-            "target_monitor": "right",
-            "positions": {
-                "TL": "BalkanBet",
-                "TC": "Merkur",
-                "TR": "MaxBet",
-                "BL": "Mozzart",
-                "BC": "Soccer",
-                "BR": "StarBet"
-            }
-        },
-        "betting_agent": {
-            "bet_amount": 10.0,
-            "auto_stop": 2.0
-        },
-        "session_keeper": {
-            "interval": 600
-        }
-    }
+    Now split into 3 separate files:
+    - last_setup.json: Last GUI setup (layout, monitor, bookmakers)
+    - betting_agent.json: Betting agent settings (bet_amount, auto_stop)
+    - bookmaker_presets.json: User-defined bookmaker layout presets
     """
-
-    CONFIG_FILE = PATH.config
 
     def __init__(self):
         self.logger = AviatorLogger.get_logger("ConfigManager")
-        self.config_file = self.CONFIG_FILE
 
-        # Create default config if not exists
-        if not self.config_file.exists():
-            self.create_default_config()
+        # User config files
+        self.last_setup_file = PATH.last_setup
+        self.betting_agent_file = PATH.betting_agent_config
+        self.bookmaker_presets_file = PATH.bookmaker_presets
 
-    def create_default_config(self):
-        """Create default config file."""
-        default_config = {
-            "last_setup": None,
-            "betting_agent": {"bet_amount": 10.0, "auto_stop": 2.0},
-            "session_keeper": {"interval": 600},
-        }
+        # Create default configs if not exist
+        self._ensure_user_configs()
 
-        self.save_config(default_config)
-        self.logger.info("Created default config.json")
+    def _ensure_user_configs(self):
+        """Create default user config files if they don't exist."""
+        # last_setup.json
+        if not self.last_setup_file.exists():
+            default_last_setup = {
+                "last_setup": None,
+                "session_keeper": {"interval": 600},
+                "tools_setup": {
+                    "layout": "layout_6",
+                    "position": "TL",
+                    "dual_monitor": True,
+                    "bookmakers": {}
+                },
+                "tools_last": {
+                    "layout": "layout_6",
+                    "position": "TL",
+                    "dual_monitor": True,
+                    "preset": "main"
+                }
+            }
+            self._save_json(self.last_setup_file, default_last_setup)
+            self.logger.info("Created default last_setup.json")
 
-    def load_config(self) -> Dict[str, Any]:
-        """
-        Load configuration from config.json.
+        # betting_agent.json
+        if not self.betting_agent_file.exists():
+            default_betting = {"bet_amount": 10.0, "auto_stop": 2.0}
+            self._save_json(self.betting_agent_file, default_betting)
+            self.logger.info("Created default betting_agent.json")
 
-        Returns:
-            Dict with configuration
-        """
+        # bookmaker_presets.json
+        if not self.bookmaker_presets_file.exists():
+            default_presets = {"layout_6": {"main": {}, "secondary": {}}}
+            self._save_json(self.bookmaker_presets_file, default_presets)
+            self.logger.info("Created default bookmaker_presets.json")
+
+    def _load_json(self, file_path) -> Dict[str, Any]:
+        """Load JSON file with error handling."""
         try:
-            with open(self.config_file, "r") as f:
-                config = json.load(f)
-
-            self.logger.info("Config loaded successfully")
-            return config
-
+            with open(file_path, "r") as f:
+                return json.load(f)
         except FileNotFoundError:
-            self.logger.warning("Config file not found, creating default")
-            self.create_default_config()
-            return self.load_config()
-
+            self.logger.warning(f"Config file not found: {file_path}")
+            self._ensure_user_configs()
+            return self._load_json(file_path)
         except json.JSONDecodeError as e:
-            self.logger.error(f"Invalid JSON in config file: {e}")
+            self.logger.error(f"Invalid JSON in {file_path}: {e}")
             raise
-
         except Exception as e:
-            self.logger.error(f"Error loading config: {e}")
+            self.logger.error(f"Error loading {file_path}: {e}")
             raise
 
-    def save_config(self, config: Dict[str, Any]):
-        """
-        Save configuration to config.json.
-
-        Args:
-            config: Configuration dict to save
-        """
+    def _save_json(self, file_path, data: Dict[str, Any]):
+        """Save JSON file with compact format."""
         try:
-            with open(self.config_file, "w") as f:
-                json.dump(config, f, indent=2)
+            # Ensure parent directory exists
+            file_path.parent.mkdir(parents=True, exist_ok=True)
 
-            self.logger.info("Config saved successfully")
+            with open(file_path, "w") as f:
+                json.dump(data, f, indent=2)
 
+            self.logger.info(f"Saved {file_path.name}")
         except Exception as e:
-            self.logger.error(f"Error saving config: {e}")
+            self.logger.error(f"Error saving {file_path}: {e}")
             raise
+
+    # === LAST SETUP ===
+
+    def get_last_setup(self) -> Optional[Dict[str, Any]]:
+        """Get last setup configuration."""
+        data = self._load_json(self.last_setup_file)
+        return data.get("last_setup")
 
     def update_last_setup(self, target_monitor: str, bookmakers: list):
         """
-        Update last_setup in config.
+        Update last_setup.
 
         Args:
-            target_monitor: Monitor identifier (e.g., "primary", "left", "right", "center_1")
+            target_monitor: Monitor identifier (e.g., "primary", "left", "right")
             bookmakers: List of dicts with 'name' and 'position'
         """
-        config = self.load_config()
-
-        config["last_setup"] = {"target_monitor": target_monitor, "bookmakers": bookmakers}
-
-        self.save_config(config)
+        data = self._load_json(self.last_setup_file)
+        data["last_setup"] = {"target_monitor": target_monitor, "bookmakers": bookmakers}
+        self._save_json(self.last_setup_file, data)
         self.logger.info("Updated last_setup")
+
+    # === BETTING AGENT ===
+
+    def get_betting_agent_config(self) -> Dict[str, float]:
+        """Get betting_agent configuration."""
+        data = self._load_json(self.betting_agent_file)
+        return data
 
     def update_betting_agent_config(self, bet_amount: float, auto_stop: float):
         """
@@ -123,12 +128,16 @@ class ConfigManager:
             bet_amount: Bet amount
             auto_stop: Auto cash-out multiplier
         """
-        config = self.load_config()
-
-        config["betting_agent"] = {"bet_amount": bet_amount, "auto_stop": auto_stop}
-
-        self.save_config(config)
+        data = {"bet_amount": bet_amount, "auto_stop": auto_stop}
+        self._save_json(self.betting_agent_file, data)
         self.logger.info("Updated betting_agent config")
+
+    # === SESSION KEEPER ===
+
+    def get_session_keeper_config(self) -> Dict[str, int]:
+        """Get session_keeper configuration."""
+        data = self._load_json(self.last_setup_file)
+        return data.get("session_keeper", {"interval": 600})
 
     def update_session_keeper_config(self, interval: int):
         """
@@ -137,39 +146,23 @@ class ConfigManager:
         Args:
             interval: Interval in seconds
         """
-        config = self.load_config()
-
-        config["session_keeper"] = {"interval": interval}
-
-        self.save_config(config)
+        data = self._load_json(self.last_setup_file)
+        data["session_keeper"] = {"interval": interval}
+        self._save_json(self.last_setup_file, data)
         self.logger.info("Updated session_keeper config")
 
-    def get_last_setup(self) -> Dict[str, Any]:
-        """
-        Get last setup configuration.
+    # === BOOKMAKER PRESETS ===
 
-        Returns:
-            Dict with last_setup or None if not configured
-        """
-        config = self.load_config()
-        return config.get("last_setup")
+    def get_bookmaker_presets(self) -> Dict[str, Any]:
+        """Get bookmaker presets."""
+        return self._load_json(self.bookmaker_presets_file)
 
-    def get_betting_agent_config(self) -> Dict[str, float]:
+    def update_bookmaker_presets(self, presets: Dict[str, Any]):
         """
-        Get betting_agent configuration.
+        Update bookmaker presets.
 
-        Returns:
-            Dict with bet_amount and auto_stop
+        Args:
+            presets: Presets dict
         """
-        config = self.load_config()
-        return config.get("betting_agent", {"bet_amount": 10.0, "auto_stop": 2.0})
-
-    def get_session_keeper_config(self) -> Dict[str, int]:
-        """
-        Get session_keeper configuration.
-
-        Returns:
-            Dict with interval
-        """
-        config = self.load_config()
-        return config.get("session_keeper", {"interval": 600})
+        self._save_json(self.bookmaker_presets_file, presets)
+        self.logger.info("Updated bookmaker presets")

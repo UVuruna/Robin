@@ -21,8 +21,8 @@ import platform
 # Import win32api only on Windows
 if platform.system() == "Windows":
     try:
-        import win32api
-        import win32con
+        import win32api  # type: ignore
+        import win32con  # type: ignore
         WIN32_AVAILABLE = True
     except ImportError:
         WIN32_AVAILABLE = False
@@ -275,6 +275,48 @@ class RegionManager:
         self.logger.debug(f"Calculated offsets for {layout} on {target_monitor}: {offsets}")
 
         return offsets
+
+    def get_cell_dimensions(
+        self,
+        layout: str,
+        target_monitor: str = "primary"
+    ) -> Tuple[int, int]:
+        """
+        Get cell width and height for a given layout on specified monitor.
+
+        Args:
+            layout: Layout name ("layout_4", "layout_6", "layout_8")
+            target_monitor: Monitor to use ("primary", "left", "right", "center")
+
+        Returns:
+            Tuple of (cell_width, cell_height)
+
+        Example:
+            For layout_6 (2x3 grid) on a 3840x2160 monitor:
+            Returns: (1280, 1044)  # 3840/3, (2160-72)/2
+        """
+        # Get monitor info
+        monitor_setup = self.get_monitor_setup()
+
+        if target_monitor not in monitor_setup:
+            self.logger.warning(f"Monitor '{target_monitor}' not found, using primary")
+            target_monitor = list(monitor_setup.keys())[0]
+
+        monitor = monitor_setup[target_monitor]
+
+        # Determine grid dimensions
+        try:
+            cols = int(layout[-1]) // 2
+        except ValueError:
+            raise ValueError(f"Unknown layout: {layout}")
+
+        # Calculate cell dimensions (subtract taskbar height from monitor height)
+        effective_height = monitor.height - self.taskbar_height
+
+        cell_width = monitor.width // cols
+        cell_height = effective_height // 2
+
+        return cell_width, cell_height
 
     def get_region(
         self,

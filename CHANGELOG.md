@@ -5,9 +5,80 @@
 **All notable changes to the AVIATOR project**
 
 [![Semantic Versioning](https://img.shields.io/badge/Semantic%20Versioning-2.0.0-blue)]()
-[![Last Update](https://img.shields.io/badge/Last%20Update-2025--11--27-green)]()
+[![Last Update](https://img.shields.io/badge/Last%20Update-2025--10--29-green)]()
 
 </div>
+
+---
+
+## [4.2.0] - 2025-10-29 - 🔄 MANDATORY WORKFLOW & Configuration Improvements
+
+### 🔄 **MANDATORY WORKFLOW Addition**
+
+**Added explicit workflow rules to CLAUDE.md for all future development work.**
+
+#### ✅ New Rules
+
+**PHASE 1: BEFORE STARTING WORK - ASK QUESTIONS**
+- Must read task carefully and identify ambiguities
+- Must ask clarifying questions before making ANY changes
+- Must propose approach and get user confirmation
+- Prevents wasted work on wrong assumptions
+
+**PHASE 2: AFTER COMPLETING WORK - VERIFY COMPLIANCE**
+- Explicit Rule Compliance Checklist (Rules #0-#5)
+- Must check for hardcoded values, version suffixes, defensive programming
+- Must list suspicious items and ask user
+- Final report format with compliance status
+
+**Impact:**
+- Enforces consistent workflow across sessions
+- Reduces errors from assumptions
+- Ensures adherence to project rules
+
+### 🔧 **Configuration & Code Improvements**
+
+#### Changed Files
+
+**core/capture/region_manager.py**
+- ✅ ADDED: `get_cell_dimensions()` method - dynamically calculates cell width/height for any layout
+- Returns `(cell_width, cell_height)` based on monitor size, layout, and taskbar height
+- No hardcoded dimensions - works with any monitor resolution
+
+**utils/region_editor.py**
+- ❌ REMOVED: Hardcoded preview dimensions (1920, 1280, 960, 1044)
+- ❌ REMOVED: Impossible fallback `if not self.coords: return 0, 0, 1280, 1044`
+- ✅ CHANGED: Uses `RegionManager.get_cell_dimensions()` for dynamic sizing
+- All dimensions now calculated from actual monitor/layout configuration
+
+**CLAUDE.md**
+- ✅ ADDED: RULE #5 - NO DEFENSIVE PROGRAMMING FOR IMPOSSIBLE SCENARIOS
+- ✅ ADDED: Mandatory workflow section (PHASE 1 & PHASE 2)
+- ✅ UPDATED: "REMEMBER ALWAYS" section with workflow as #1 priority
+
+#### Deleted References
+
+**project_knowledge.md - REMOVED**
+- Consolidated all AI instructions into CLAUDE.md
+- Eliminated duplicate documentation
+- Single source of truth for development rules
+
+**Updated Documentation:**
+- `STRUCTURE.md` - Removed project_knowledge.md references
+- `CHANGELOG.md` - Removed project_knowledge.md references
+- All markdown files now reference only CLAUDE.md
+
+#### 📊 Impact
+
+**Code Quality:**
+- Zero hardcoded configuration values in region_editor.py
+- Dynamic calculation supports any monitor resolution
+- Cleaner, more maintainable code
+
+**Documentation:**
+- Single source of truth (CLAUDE.md only)
+- Explicit workflow enforcement
+- Clear compliance verification process
 
 ---
 
@@ -207,11 +278,6 @@ All tests updated with:
   - Added critical utility tools documentation
   - Focused on big-picture patterns with line numbers
 
-- `project_knowledge.md` - Complete rewrite
-  - Aligned with new CLAUDE.md
-  - Removed redundancies
-  - Added workflow checklists
-
 #### 🗑️ Deleted
 
 **Obsolete Files Permanently Removed:**
@@ -312,11 +378,11 @@ dual_monitor=False → monitor_name="primary"
 - `orchestration/shared_reader.py` - NO LONGER USED (replaced by parallel pattern)
 
 **Documentation:**
-- Added **VERSIONING ANTI-PATTERN** rules to `CLAUDE.md` and `project_knowledge.md`
+- Added **VERSIONING ANTI-PATTERN** rules to `CLAUDE.md`
   - ❌ NEVER create `_v2`, `_v3`, `_new`, `_old` file versions
   - ✅ ALWAYS refactor existing files directly (Git stores history!)
 
-- Added **MISSING FUNCTIONALITY PROHIBITION** rules to both MD files
+- Added **MISSING FUNCTIONALITY PROHIBITION** rules to `CLAUDE.md`
   - 🚨 NEVER delete code without understanding it
   - 🚨 ALWAYS search for renamed/moved functionality
   - 🚨 ALWAYS ask user if unsure
@@ -360,7 +426,7 @@ dual_monitor=False → monitor_name="primary"
   - EventBus uloga i primeri koda
   - Detalji o Agents-ima i njihovoj integraciji
 
-- `project_knowledge.md` - Dodati paterni:
+- `CLAUDE.md` - Dodati paterni:
   - "ADDING A NEW AGENT" sekcija sa template kodom
   - Closure pattern za pristup local_state
   - Mutual exclusivity pattern (BettingAgent vs SessionKeeper)

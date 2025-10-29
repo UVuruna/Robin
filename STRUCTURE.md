@@ -26,8 +26,7 @@ aviator/                                 [PROJECT ROOT]
 │   ├── STRUCTURE.md                    ✅ [POPULATED] - Project file organization
 │   ├── ARCHITECTURE.md                 ✅ [POPULATED] - Architecture documentation
 │   ├── CHANGELOG.md                    ✅ [POPULATED] - Version history
-│   ├── CLAUDE.md                       ✅ [POPULATED] - AI instructions
-│   ├── project_knowledge.md            ✅ [POPULATED] - Project knowledge instructions
+│   ├── CLAUDE.md                       ✅ [POPULATED] - AI instructions & workflow
 │   └── requirements.txt                ✅ [EXISTS] - Dependencies
 │
 ├── 📁 core/                            [JEZGRO SISTEMA]
@@ -316,10 +315,9 @@ All duplicate files have been deleted!
 
 ### 📝 DOKUMENTACIJA:
 1. ✅ **ARCHITECTURE.md** - Ažuriran sa Worker Process Pattern
-2. ✅ **CLAUDE.md** - Ažuriran sa novim principima
-3. ✅ **project_knowledge.md** - Ažuriran sa agent workflow
-4. ✅ **CHANGELOG.md** - Dokumentovana v3.0 arhitektura
-5. ✅ **STRUCTURE.md** - Ažuriran status svih fajlova
+2. ✅ **CLAUDE.md** - Ažuriran sa novim principima i workflow-om
+3. ✅ **CHANGELOG.md** - Dokumentovana v3.0 arhitektura
+4. ✅ **STRUCTURE.md** - Ažuriran status svih fajlova
 
 ## G. ✅ ZAKLJUČAK
 

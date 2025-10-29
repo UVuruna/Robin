@@ -120,3 +120,11 @@ credentials/
 # Test files
 test_output/
 *.test
+# User config files (NOT in Git)
+config/user/*
+!config/user/.gitignore
+
+# Old JSON files (deprecated after refactor)
+data/json/config.json
+data/json/bookmaker_config.json
+data/json/model_mapping.json

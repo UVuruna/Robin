@@ -31,6 +31,7 @@ import mss
 from datetime import datetime
 import json
 from core.capture.region_manager import RegionManager
+from config.settings import PATH
 
 class RegionVisualizerDialog(QDialog):
     """Region Visualizer v10.0 - uses RegionManager."""
@@ -59,22 +60,22 @@ class RegionVisualizerDialog(QDialog):
         self.setWindowState(Qt.WindowState.WindowMaximized)
 
     def _load_colors(self):
-        """Load colors from screen_regions.json."""
+        """Load colors from screen_regions.json and convert RGB to BGR."""
         try:
-            coords_file = Path("data/json/screen_regions.json")
-            if coords_file.exists():
-                with open(coords_file, "r") as f:
+            if PATH.screen_regions.exists():
+                with open(PATH.screen_regions, "r") as f:
                     data = json.load(f)
 
-                if "region_colors" in data:
+                if "region_colors_rgb" in data:
+                    # Load RGB colors and convert to BGR for OpenCV
                     self.region_colors = {
-                        key: tuple(color)
-                        for key, color in data["region_colors"].items()
+                        key: (rgb[2], rgb[1], rgb[0])  # RGB → BGR
+                        for key, rgb in data["region_colors_rgb"].items()
                     }
-                    print(f"✅ Loaded {len(self.region_colors)} colors from JSON")
+                    print(f"✅ Loaded {len(self.region_colors)} colors from JSON (RGB → BGR)")
                 else:
                     self.region_colors = self._get_default_colors()
-                    print("⚠️ No colors in JSON, using defaults")
+                    print("⚠️ No region_colors_rgb in JSON, using defaults")
             else:
                 self.region_colors = self._get_default_colors()
                 print("⚠️ JSON not found, using defaults")
@@ -84,21 +85,21 @@ class RegionVisualizerDialog(QDialog):
             self.region_colors = self._get_default_colors()
 
     def _get_default_colors(self) -> dict:
-        """Default colors fallback."""
+        """Default colors fallback (BGR format for OpenCV)."""
         return {
-            "score_region_small": (0, 255, 0),
-            "score_region_medium": (0, 255, 255),
-            "score_region_large": (0, 128, 255),
-            "my_money_region": (255, 0, 0),
-            "other_count_region": (255, 0, 255),
-            "other_money_region": (255, 255, 0),
-            "phase_region": (128, 0, 128),
-            "play_amount_coords_1": (0, 0, 255),
-            "play_button_coords_1": (255, 128, 0),
-            "auto_play_coords_1": (128, 255, 0),
-            "play_amount_coords_2": (0, 128, 128),
-            "play_button_coords_2": (128, 128, 255),
-            "auto_play_coords_2": (255, 255, 128),
+            "score_region_small": (0, 255, 0),        # Green
+            "score_region_medium": (255, 255, 0),     # Cyan
+            "score_region_large": (255, 128, 0),      # Orange
+            "my_money_region": (0, 0, 255),           # Red
+            "other_count_region": (255, 0, 255),      # Magenta
+            "other_money_region": (0, 255, 255),      # Yellow
+            "phase_region": (128, 0, 128),            # Purple
+            "play_amount_coords_1": (255, 0, 0),      # Blue
+            "play_button_coords_1": (0, 128, 255),    # Orange
+            "auto_play_coords_1": (0, 255, 128),      # Light Green
+            "play_amount_coords_2": (128, 128, 0),    # Teal
+            "play_button_coords_2": (255, 128, 128),  # Light Blue
+            "auto_play_coords_2": (128, 255, 255),    # Light Yellow
         }
 
     def init_ui(self):
@@ -185,7 +186,7 @@ class RegionVisualizerDialog(QDialog):
         return group
 
     def create_legend(self) -> QGroupBox:
-        """Create color legend from JSON colors."""
+        """Create color legend from JSON colors (BGR → RGB for display)."""
         group = QGroupBox("Region Colors (from JSON)")
         layout = QVBoxLayout(group)
 
@@ -208,7 +209,7 @@ class RegionVisualizerDialog(QDialog):
 
         for region_key, friendly_name in friendly_names.items():
             if region_key in self.region_colors:
-                # BGR to RGB for display
+                # Convert BGR (OpenCV) to RGB (display)
                 bgr_color = self.region_colors[region_key]
                 rgb_color = (bgr_color[2], bgr_color[1], bgr_color[0])
                 hex_color = f"#{rgb_color[0]:02X}{rgb_color[1]:02X}{rgb_color[2]:02X}"
@@ -363,17 +364,17 @@ class RegionVisualizerDialog(QDialog):
             return None
 
     def draw_region(self, image: np.ndarray, region_name: str, coords: dict):
-        """Draw region with cross at center using JSON colors."""
+        """Draw region with cross at center using BGR colors."""
         x1 = coords["left"]
         y1 = coords["top"]
         x2 = x1 + coords["width"]
         y2 = y1 + coords["height"]
 
-        # Use JSON colors
-        color = self.region_colors.get(region_name, (255, 255, 255))
+        # Use BGR colors (already converted from RGB in _load_colors)
+        bgr_color = self.region_colors.get(region_name, (255, 255, 255))
 
         # Draw rectangle
-        cv2.rectangle(image, (x1, y1), (x2, y2), color, 3)
+        cv2.rectangle(image, (x1, y1), (x2, y2), bgr_color, 3)
 
         # Draw cross at center
         center_x = (x1 + x2) // 2
@@ -384,14 +385,14 @@ class RegionVisualizerDialog(QDialog):
             image,
             (center_x - cross_size, center_y),
             (center_x + cross_size, center_y),
-            color,
+            bgr_color,
             2,
         )
         cv2.line(
             image,
             (center_x, center_y - cross_size),
             (center_x, center_y + cross_size),
-            color,
+            bgr_color,
             2,
         )
 
@@ -403,7 +404,7 @@ class RegionVisualizerDialog(QDialog):
             (x1, max(y1 - 10, 20)),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.6,
-            color,
+            bgr_color,
             2,
         )
 
