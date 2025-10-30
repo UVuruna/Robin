@@ -14,11 +14,15 @@ import time
 import logging
 from typing import Dict, Optional, Any, Set, List
 from datetime import datetime
+import cv2
+import numpy as np
+from pathlib import Path
 
 from collectors.base_collector import BaseCollector
 from core.communication.shared_state import SharedGameState, GamePhase
 from core.communication.event_bus import EventPublisher, EventType
 from data_layer.database.batch_writer import BatchDatabaseWriter
+from config.settings import PATH
 
 
 class MainDataCollector(BaseCollector):
@@ -63,6 +67,11 @@ class MainDataCollector(BaseCollector):
         # State tracking
         self.last_phase = GamePhase.UNKNOWN
         self.last_score: Optional[float] = None
+
+        # Screenshot capturing for CNN training
+        self.screenshot_dir = PATH.screenshots_dir
+        self.screenshot_dir.mkdir(parents=True, exist_ok=True)
+        self.screenshot_enabled = True  # Can be toggled if needed
 
         # Statistics
         self.rounds_collected = 0
@@ -363,6 +372,33 @@ class MainDataCollector(BaseCollector):
         })
 
         return base_stats
+
+    def save_score_screenshot(self, score: float, image: np.ndarray) -> bool:
+        """
+        Save score screenshot for CNN training data.
+
+        Args:
+            score: Score value (e.g., 1.50, 2.34)
+            image: Score region image (np.ndarray from screen capture)
+
+        Returns:
+            True if saved successfully
+        """
+        if not self.screenshot_enabled or image is None:
+            return False
+
+        try:
+            timestamp = int(time.time())
+            filename = f"score_{score:.2f}x_{timestamp}.png"
+            filepath = self.screenshot_dir / filename
+
+            cv2.imwrite(str(filepath), image)
+            self.logger.debug(f"Saved score screenshot: {filename}")
+            return True
+
+        except Exception as e:
+            self.logger.error(f"Failed to save screenshot: {e}")
+            return False
 
 
 if __name__ == "__main__":

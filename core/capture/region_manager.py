@@ -34,19 +34,33 @@ else:
 
 def get_taskbar_height() -> int:
     """
-    Get Windows taskbar height.
+    Get Windows taskbar height (accounting for DPI scaling).
 
     Returns:
         Taskbar height in pixels. Falls back to 72px if detection fails.
     """
     if WIN32_AVAILABLE:
         try:
-            # Get full screen height and work area height
+            # Get full screen height and work area height (DPI-scaled values)
             screen_height = win32api.GetSystemMetrics(win32con.SM_CYSCREEN)
             work_area = win32api.GetSystemMetrics(win32con.SM_CYFULLSCREEN)
-            taskbar_height = screen_height - work_area
+            taskbar_height_scaled = screen_height - work_area
 
-            # Sanity check (taskbar usually 40-100px)
+            # Get DPI scale factor (100% = 96 DPI, 150% = 144 DPI, 200% = 192 DPI)
+            try:
+                import ctypes
+                user32 = ctypes.windll.user32
+                user32.SetProcessDPIAware()
+                dpi = user32.GetDpiForSystem()
+                scale_factor = dpi / 96.0  # 96 DPI = 100% scaling
+
+                # Unscale the taskbar height
+                taskbar_height = round(taskbar_height_scaled / scale_factor)
+            except:
+                # If DPI detection fails, use scaled value
+                taskbar_height = taskbar_height_scaled
+
+            # Sanity check (taskbar usually 40-100px at 100% scaling)
             if 30 <= taskbar_height <= 150:
                 return taskbar_height
         except Exception as e:
@@ -395,27 +409,87 @@ class RegionManager:
 
     def get_monitor_setup(self) -> Dict[str, MonitorInfo]:
         """
-        Get monitor setup with logical names.
+        Get monitor setup with spatial grid positions.
+
+        Uses spatial algorithm:
+        1. Group monitors by Y coordinate (rows)
+        2. Sort each row by X coordinate (columns)
+        3. Generate grid positions (row, col)
+        4. Create descriptive labels (Top-Left, Bottom-Right, etc.)
 
         Returns:
-            Dictionary with "left", "center", "right" monitors (if they exist)
+            Dictionary with monitor labels as keys (e.g., "Left", "Top-Right")
         """
         if not self.monitors:
             return {}
 
-        # Sort monitors by X position
-        sorted_monitors = sorted(self.monitors, key=lambda m: m.x)
+        if len(self.monitors) == 1:
+            return {"primary": self.monitors[0]}
 
+        # Step I: Group monitors by Y position (rows)
+        y_positions = sorted(set(m.y for m in self.monitors))
+        rows = {}
+        for y in y_positions:
+            rows[y] = [m for m in self.monitors if m.y == y]
+
+        # Step II: Sort each row by X position (columns)
+        for monitors_in_row in rows.values():
+            monitors_in_row.sort(key=lambda m: m.x)
+
+        # Step III: Create grid positions
+        grid_positions = []
+        for row_idx, (y, monitors_in_row) in enumerate(sorted(rows.items())):
+            for col_idx, monitor in enumerate(monitors_in_row):
+                grid_positions.append((monitor, (row_idx, col_idx)))
+
+        # Step IV: Generate labels
+        num_rows = len(rows)
+        num_cols = max(len(monitors_in_row) for monitors_in_row in rows.values())
+
+        # Row labels
+        if num_rows == 1:
+            row_labels = [""]
+        elif num_rows == 2:
+            row_labels = ["Top", "Bottom"]
+        else:
+            row_labels = ["Top"]
+            for i in range(1, num_rows - 1):
+                row_labels.append(f"Middle-{i}")
+            row_labels.append("Bottom")
+
+        # Column labels
+        if num_cols == 1:
+            col_labels = [""]
+        elif num_cols == 2:
+            col_labels = ["Left", "Right"]
+        else:
+            col_labels = ["Left"]
+            for i in range(1, num_cols - 1):
+                col_labels.append(f"Center-{i}")
+            col_labels.append("Right")
+
+        # Step V: Build setup dictionary
         setup = {}
-        if len(sorted_monitors) == 1:
-            setup["primary"] = sorted_monitors[0]
-        elif len(sorted_monitors) == 2:
-            setup["left"] = sorted_monitors[0]
-            setup["right"] = sorted_monitors[1]
-        elif len(sorted_monitors) >= 3:
-            setup["left"] = sorted_monitors[0]
-            setup["center"] = sorted_monitors[1]
-            setup["right"] = sorted_monitors[2]
+        for monitor, (row, col) in grid_positions:
+            row_label = row_labels[row] if row < len(row_labels) else ""
+            col_label = col_labels[col] if col < len(col_labels) else ""
+
+            if row_label and col_label:
+                label = f"{row_label}-{col_label}"
+            elif row_label:
+                label = row_label
+            elif col_label:
+                label = col_label
+            else:
+                label = "Primary"
+
+            setup[label] = monitor
+
+        # Also add "primary" key for convenience
+        for mon in self.monitors:
+            if mon.is_primary:
+                setup["primary"] = mon
+                break
 
         return setup
 

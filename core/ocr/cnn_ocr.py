@@ -1,5 +1,5 @@
 # core/ocr/cnn_ocr.py
-# VERSION: 1.0 - COMPLETE CNN OCR Implementation
+# VERSION: 2.0 - CNN OCR with LAZY TensorFlow Import
 # PURPOSE: CNN-based OCR for score/money reading using trained models
 
 import cv2
@@ -9,15 +9,38 @@ from pathlib import Path
 from typing import Optional, Dict
 import pickle
 
-# NOTE: TensorFlow/Keras imports are optional - model loading done lazily
-try:
-    import tensorflow as tf
-    from tensorflow import keras
-    TENSORFLOW_AVAILABLE = True
-except ImportError:
-    TENSORFLOW_AVAILABLE = False
-    keras = None
-    tf = None
+# LAZY IMPORT: TensorFlow/Keras loaded ONLY when CNN models are actually used
+TENSORFLOW_AVAILABLE = None  # None = not checked yet, True/False after check
+tf = None
+keras = None
+
+
+def _ensure_tensorflow():
+    """
+    Lazy import TensorFlow - only loads when CNN OCR is actually used.
+
+    Returns:
+        True if TensorFlow is available, False otherwise
+    """
+    global TENSORFLOW_AVAILABLE, tf, keras
+
+    if TENSORFLOW_AVAILABLE is None:
+        try:
+            import tensorflow as tf_module
+            from tensorflow import keras as keras_module
+            tf = tf_module
+            keras = keras_module
+            TENSORFLOW_AVAILABLE = True
+
+            # Suppress TensorFlow warnings
+            tf_module.get_logger().setLevel('ERROR')
+
+        except ImportError:
+            TENSORFLOW_AVAILABLE = False
+            tf = None
+            keras = None
+
+    return TENSORFLOW_AVAILABLE
 
 
 class CNNOCRReader:
@@ -33,7 +56,7 @@ class CNNOCRReader:
 
     def __init__(self, model_paths: Dict[str, Path]):
         """
-        Initialize CNN OCR Reader.
+        Initialize CNN OCR Reader (TensorFlow NOT imported yet).
 
         Args:
             model_paths: Dictionary mapping region type to model path
@@ -44,14 +67,14 @@ class CNNOCRReader:
         self.models: Dict[str, any] = {}  # Lazy-loaded models
         self.loaded = False
 
-        if not TENSORFLOW_AVAILABLE:
-            self.logger.warning("TensorFlow not available - CNN OCR will not work!")
-
+        # NOTE: TensorFlow is NOT imported here! Will be loaded when first model is needed.
         self.logger.info(f"CNN OCR Reader initialized with {len(model_paths)} model paths")
 
     def _load_model(self, region_type: str) -> bool:
         """
         Lazy load CNN model for specific region type.
+
+        This is where TensorFlow is actually imported (first time only).
 
         Args:
             region_type: "score", "money", etc.
@@ -59,7 +82,8 @@ class CNNOCRReader:
         Returns:
             True if model loaded successfully
         """
-        if not TENSORFLOW_AVAILABLE:
+        # LAZY IMPORT: Load TensorFlow NOW (only first time)
+        if not _ensure_tensorflow():
             self.logger.error("Cannot load model - TensorFlow not available")
             return False
 

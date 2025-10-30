@@ -128,3 +128,7 @@ config/user/*
 data/json/config.json
 data/json/bookmaker_config.json
 data/json/model_mapping.json
+
+# instructions for claude
+instructionPNG/
+query.txt

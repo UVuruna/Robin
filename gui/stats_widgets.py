@@ -40,8 +40,8 @@ class DataCollectorStats(QWidget):
         self.session_start = datetime.now()
         self.logger = AviatorLogger.get_logger("Stats-DataCollector")
 
-        # Bookmaker configuration
-        self.bookmaker_names = bookmaker_names or ["Mozzart"] * 6
+        # Bookmaker configuration - DYNAMIC, not hardcoded!
+        self.bookmaker_names = bookmaker_names if bookmaker_names else []
         self.grid_layout = grid_layout
         self.bookmaker_statuses = {name: "INACTIVE" for name in self.bookmaker_names}
 
@@ -318,7 +318,8 @@ class BettingAgentStats(QWidget):
         self.session_start = datetime.now()
         self.logger = AviatorLogger.get_logger("Stats-BettingAgent")
 
-        self.bookmaker_names = bookmaker_names or ["Mozzart"] * 6
+        # Bookmaker configuration - DYNAMIC, not hardcoded!
+        self.bookmaker_names = bookmaker_names if bookmaker_names else []
         self.grid_layout = grid_layout
         self.bookmaker_statuses = {name: "INACTIVE" for name in self.bookmaker_names}
 
@@ -571,7 +572,8 @@ class RGBCollectorStats(QWidget):
         self.session_start = datetime.now()
         self.logger = AviatorLogger.get_logger("Stats-RGBCollector")
 
-        self.bookmaker_names = bookmaker_names or ["Mozzart"] * 6
+        # Bookmaker configuration - DYNAMIC, not hardcoded!
+        self.bookmaker_names = bookmaker_names if bookmaker_names else []
         self.grid_layout = grid_layout
 
         self.single_labels = {}
@@ -769,7 +771,8 @@ class SessionKeeperStats(QWidget):
         self.session_start = datetime.now()
         self.logger = AviatorLogger.get_logger("Stats-SessionKeeper")
 
-        self.bookmaker_names = bookmaker_names or ["Mozzart"] * 6
+        # Bookmaker configuration - DYNAMIC, not hardcoded!
+        self.bookmaker_names = bookmaker_names if bookmaker_names else []
         self.grid_layout = grid_layout
 
         self.single_labels = {}

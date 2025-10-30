@@ -16,9 +16,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QWidget,
     QVBoxLayout,
-    QHBoxLayout,
     QTabWidget,
-    QPushButton,
     QTextEdit,
     QLabel,
     QSplitter,
@@ -170,8 +168,8 @@ class AviatorControlPanel(QMainWindow):
         """
         Create tab for an app.
 
-        Layout: [Stats (left)] | [Logs (right)]
-                [Control Buttons (bottom)]
+        Layout: [Stats (left 65-70%)] | [Logs (right 30-35%)]
+        NO bottom buttons - buttons are in TOTAL panel inside stats widgets!
         """
         widget = QWidget()
         layout = QVBoxLayout()
@@ -180,19 +178,42 @@ class AviatorControlPanel(QMainWindow):
         # Splitter for stats (left) and logs (right)
         splitter = QSplitter(Qt.Orientation.Horizontal)
 
-        # Left: Stats widget
+        # Extract bookmaker names and grid layout from config
+        bookmaker_names = []
+        if self.config.get("bookmakers"):
+            bookmaker_names = [bm["name"] for bm in self.config["bookmakers"]]
+        elif self.config.get("tools_setup", {}).get("bookmakers"):
+            # Fallback to tools_setup if last_setup not available
+            bookmakers_dict = self.config["tools_setup"]["bookmakers"]
+            bookmaker_names = list(bookmakers_dict.values())
+
+        grid_layout = self.config.get("layout", "GRID 2×3")
+
+        # Left: Stats widget (DYNAMIC - reads from config!)
         if app_name == "data_collector":
-            stats_widget = DataCollectorStats()
+            stats_widget = DataCollectorStats(bookmaker_names=bookmaker_names, grid_layout=grid_layout)
             self.data_stats = stats_widget
+            # Connect signals
+            stats_widget.start_all.connect(self.start_data_collector)
+            stats_widget.stop_all.connect(self.stop_data_collector)
         elif app_name == "rgb_collector":
-            stats_widget = RGBCollectorStats()
+            stats_widget = RGBCollectorStats(bookmaker_names=bookmaker_names, grid_layout=grid_layout)
             self.rgb_stats = stats_widget
+            # Connect signals
+            stats_widget.start_all.connect(self.start_rgb_collector)
+            stats_widget.stop_all.connect(self.stop_rgb_collector)
         elif app_name == "betting_agent":
-            stats_widget = BettingAgentStats()
+            stats_widget = BettingAgentStats(bookmaker_names=bookmaker_names, grid_layout=grid_layout)
             self.betting_stats = stats_widget
+            # Connect signals
+            stats_widget.start_all.connect(self.start_betting_agent)
+            stats_widget.instant_stop_single.connect(self.stop_betting_agent_instant)
         elif app_name == "session_keeper":
-            stats_widget = SessionKeeperStats()
+            stats_widget = SessionKeeperStats(bookmaker_names=bookmaker_names, grid_layout=grid_layout)
             self.keeper_stats = stats_widget
+            # Connect signals
+            stats_widget.start_all.connect(self.start_session_keeper)
+            stats_widget.stop_all.connect(self.stop_session_keeper)
         else:
             stats_widget = QLabel("No stats available")
 
@@ -216,75 +237,15 @@ class AviatorControlPanel(QMainWindow):
 
         splitter.addWidget(log_widget)
 
-        # Set splitter sizes (30% stats, 70% logs)
-        splitter.setSizes([300, 700])
+        # Set splitter sizes (65% stats, 35% logs) - user requested 30-35% for logs on RIGHT
+        splitter.setSizes([650, 350])
 
         layout.addWidget(splitter)
 
-        # Bottom: Control buttons
-        layout.addLayout(self.create_control_buttons(app_name))
+        # NO bottom buttons - they are now in TOTAL panel inside stats widgets!
 
         return widget
 
-    def create_control_buttons(self, app_name: str) -> QHBoxLayout:
-        """Create START/STOP buttons for app."""
-        layout = QHBoxLayout()
-
-        if app_name == "data_collector":
-            self.btn_start_data = QPushButton("▶️ START")
-            self.btn_stop_data = QPushButton("⏹️ STOP")
-            self.btn_stop_data.setEnabled(False)
-
-            self.btn_start_data.clicked.connect(self.start_data_collector)
-            self.btn_stop_data.clicked.connect(self.stop_data_collector)
-
-            layout.addWidget(self.btn_start_data)
-            layout.addWidget(self.btn_stop_data)
-
-        elif app_name == "rgb_collector":
-            self.btn_start_rgb = QPushButton("▶️ START")
-            self.btn_stop_rgb = QPushButton("⏹️ STOP")
-            self.btn_stop_rgb.setEnabled(False)
-
-            self.btn_start_rgb.clicked.connect(self.start_rgb_collector)
-            self.btn_stop_rgb.clicked.connect(self.stop_rgb_collector)
-
-            layout.addWidget(self.btn_start_rgb)
-            layout.addWidget(self.btn_stop_rgb)
-
-        elif app_name == "betting_agent":
-            self.btn_start_betting = QPushButton("▶️ START")
-            self.btn_stop_betting_graceful = QPushButton("🛑 GRACEFUL STOP")
-            self.btn_stop_betting_instant = QPushButton("⚡ INSTANT STOP")
-
-            self.btn_stop_betting_graceful.setEnabled(False)
-            self.btn_stop_betting_instant.setEnabled(False)
-
-            self.btn_start_betting.clicked.connect(self.start_betting_agent)
-            self.btn_stop_betting_graceful.clicked.connect(
-                self.stop_betting_agent_graceful
-            )
-            self.btn_stop_betting_instant.clicked.connect(
-                self.stop_betting_agent_instant
-            )
-
-            layout.addWidget(self.btn_start_betting)
-            layout.addWidget(self.btn_stop_betting_graceful)
-            layout.addWidget(self.btn_stop_betting_instant)
-
-        elif app_name == "session_keeper":
-            self.btn_start_keeper = QPushButton("▶️ START")
-            self.btn_stop_keeper = QPushButton("⏹️ STOP")
-            self.btn_stop_keeper.setEnabled(False)
-
-            self.btn_start_keeper.clicked.connect(self.start_session_keeper)
-            self.btn_stop_keeper.clicked.connect(self.stop_session_keeper)
-
-            layout.addWidget(self.btn_start_keeper)
-            layout.addWidget(self.btn_stop_keeper)
-
-        layout.addStretch()
-        return layout
 
     # ========================================================================
     # LOG CALLBACK - Real-time log streaming
@@ -330,7 +291,7 @@ class AviatorControlPanel(QMainWindow):
             if not self.config.get("bookmakers"):
                 QMessageBox.warning(self, "No Config", "Setup cancelled!")
                 return
-        
+
         # Calculate coordinates for each bookmaker
         bookmakers_config = []
         layout = self.config.get("layout", "GRID 2×3")
@@ -358,8 +319,11 @@ class AviatorControlPanel(QMainWindow):
         )
 
         if success:
-            self.btn_start_data.setEnabled(False)
-            self.btn_stop_data.setEnabled(True)
+            # Update button states in stats widget
+            if hasattr(self, 'data_stats'):
+                self.data_stats.btn_start_all.setEnabled(False)
+                self.data_stats.btn_stop_all.setEnabled(True)
+
             self.data_log.append("=== Data Collector Started (v3.0 Architecture) ===\n")
             self.data_log.append(f"Tracking {len(bookmakers_config)} bookmakers")
 
@@ -373,11 +337,14 @@ class AviatorControlPanel(QMainWindow):
         """Stop Data Collector and show statistics."""
         # Get final stats before stopping
         stats = self.app_controller.get_worker_status("data_collector")
-        
+
         self.app_controller.stop_app("data_collector")
-        self.btn_start_data.setEnabled(True)
-        self.btn_stop_data.setEnabled(False)
-        
+
+        # Update button states in stats widget
+        if hasattr(self, 'data_stats'):
+            self.data_stats.btn_start_all.setEnabled(True)
+            self.data_stats.btn_stop_all.setEnabled(False)
+
         # Show statistics
         if stats.get("workers"):
             self.data_log.append("\n📊 Final Statistics:")
@@ -386,7 +353,7 @@ class AviatorControlPanel(QMainWindow):
                     self.data_log.append(f"  {worker_name}:")
                     self.data_log.append(f"    • Uptime: {worker_stats.get('uptime', 0):.0f}s")
                     self.data_log.append(f"    • Restarts: {worker_stats.get('restart_count', 0)}")
-        
+
         self.data_log.append("\n=== Data Collector Stopped ===")
 
     def show_system_stats(self):
@@ -422,15 +389,22 @@ class AviatorControlPanel(QMainWindow):
         )
 
         if success:
-            self.btn_start_rgb.setEnabled(False)
-            self.btn_stop_rgb.setEnabled(True)
+            # Update button states in stats widget
+            if hasattr(self, 'rgb_stats'):
+                self.rgb_stats.btn_start_all.setEnabled(False)
+                self.rgb_stats.btn_stop_all.setEnabled(True)
+
             self.rgb_log.append("=== RGB Collector Started ===\n")
 
     def stop_rgb_collector(self):
         """Stop RGB Collector."""
         self.app_controller.stop_app("rgb_collector")
-        self.btn_start_rgb.setEnabled(True)
-        self.btn_stop_rgb.setEnabled(False)
+
+        # Update button states in stats widget
+        if hasattr(self, 'rgb_stats'):
+            self.rgb_stats.btn_start_all.setEnabled(True)
+            self.rgb_stats.btn_stop_all.setEnabled(False)
+
         self.rgb_log.append("\n=== RGB Collector Stopped ===")
 
     def start_betting_agent(self):
@@ -448,26 +422,37 @@ class AviatorControlPanel(QMainWindow):
         )
 
         if success:
-            self.btn_start_betting.setEnabled(False)
-            self.btn_stop_betting_graceful.setEnabled(True)
-            self.btn_stop_betting_instant.setEnabled(True)
+            # Update button states in stats widget
+            if hasattr(self, 'betting_stats'):
+                self.betting_stats.btn_start_all.setEnabled(False)
+                self.betting_stats.btn_cancel_stop_all.setEnabled(True)
+                self.betting_stats.btn_instant_stop_all.setEnabled(True)
+
             self.betting_log.append("=== Betting Agent Started ===\n")
 
     def stop_betting_agent_graceful(self):
         """Stop Betting Agent (graceful - finish current cycle)."""
         # TODO: Implement graceful stop signal via file/queue
         self.app_controller.stop_app("betting_agent", force=False)
-        self.btn_start_betting.setEnabled(True)
-        self.btn_stop_betting_graceful.setEnabled(False)
-        self.btn_stop_betting_instant.setEnabled(False)
+
+        # Update button states in stats widget
+        if hasattr(self, 'betting_stats'):
+            self.betting_stats.btn_start_all.setEnabled(True)
+            self.betting_stats.btn_cancel_stop_all.setEnabled(False)
+            self.betting_stats.btn_instant_stop_all.setEnabled(False)
+
         self.betting_log.append("\n=== Betting Agent Stopped (Graceful) ===")
 
     def stop_betting_agent_instant(self):
         """Stop Betting Agent (instant - kill immediately)."""
         self.app_controller.stop_app("betting_agent", force=True)
-        self.btn_start_betting.setEnabled(True)
-        self.btn_stop_betting_graceful.setEnabled(False)
-        self.btn_stop_betting_instant.setEnabled(False)
+
+        # Update button states in stats widget
+        if hasattr(self, 'betting_stats'):
+            self.betting_stats.btn_start_all.setEnabled(True)
+            self.betting_stats.btn_cancel_stop_all.setEnabled(False)
+            self.betting_stats.btn_instant_stop_all.setEnabled(False)
+
         self.betting_log.append("\n=== Betting Agent Stopped (Instant) ===")
 
     def start_session_keeper(self):
@@ -481,15 +466,22 @@ class AviatorControlPanel(QMainWindow):
         )
 
         if success:
-            self.btn_start_keeper.setEnabled(False)
-            self.btn_stop_keeper.setEnabled(True)
+            # Update button states in stats widget
+            if hasattr(self, 'keeper_stats'):
+                self.keeper_stats.btn_start_all.setEnabled(False)
+                self.keeper_stats.btn_stop_all.setEnabled(True)
+
             self.keeper_log.append("=== Session Keeper Started ===\n")
 
     def stop_session_keeper(self):
         """Stop Session Keeper."""
         self.app_controller.stop_app("session_keeper")
-        self.btn_start_keeper.setEnabled(True)
-        self.btn_stop_keeper.setEnabled(False)
+
+        # Update button states in stats widget
+        if hasattr(self, 'keeper_stats'):
+            self.keeper_stats.btn_start_all.setEnabled(True)
+            self.keeper_stats.btn_stop_all.setEnabled(False)
+
         self.keeper_log.append("\n=== Session Keeper Stopped ===")
 
     # ========================================================================

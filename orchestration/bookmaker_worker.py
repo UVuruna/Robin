@@ -323,9 +323,27 @@ class BookmakerWorker:
             'pid': mp.current_process().pid
         })
 
+        # Graceful shutdown state
+        graceful_shutdown = False
+
         try:
-            while not self.shutdown_event.is_set():
+            while not self.shutdown_event.is_set() or graceful_shutdown:
                 loop_start = time.time()
+
+                # ===== CHECK GRACEFUL SHUTDOWN =====
+                if self.shutdown_event.is_set() and not graceful_shutdown:
+                    # Shutdown requested - check if we need to wait for round end
+                    if self.current_state == GameState.PLAYING:
+                        self.logger.info("Graceful shutdown: Waiting for round to end...")
+                        graceful_shutdown = True
+                    else:
+                        # Not in active round, exit immediately
+                        break
+
+                # ===== EXIT IF GRACEFUL SHUTDOWN COMPLETE =====
+                if graceful_shutdown and self.current_state == GameState.ENDED:
+                    self.logger.info("Graceful shutdown: Round ended, exiting...")
+                    break
 
                 # ===== MAIN OCR CYCLE =====
                 self.ocr_cycle()
@@ -423,6 +441,8 @@ class BookmakerWorker:
         """
         Read score using OCREngine (Template/Tesseract/CNN).
 
+        Also saves screenshot for CNN training data (zero overhead).
+
         Returns:
             Score or None
         """
@@ -438,7 +458,7 @@ class BookmakerWorker:
         if not region:
             return None
 
-        # Capture
+        # Capture image ONCE (used for both OCR and screenshot saving)
         image = self.screen_capture.capture_region(region)
         if image is None:
             return None
@@ -450,7 +470,16 @@ class BookmakerWorker:
             try:
                 # Remove 'x' suffix if present
                 score_str = score_str.replace('x', '').replace('X', '').strip()
-                return float(score_str)
+                score = float(score_str)
+
+                # Save screenshot for CNN training (if main collector exists)
+                if self.collectors:
+                    for collector in self.collectors:
+                        if hasattr(collector, 'save_score_screenshot'):
+                            collector.save_score_screenshot(score, image)
+                            break
+
+                return score
             except (ValueError, TypeError):
                 self.logger.debug(f"Failed to parse score: {score_str}")
                 return None
@@ -807,6 +836,16 @@ class BookmakerWorker:
         for thread in self.threads:
             if thread.is_alive():
                 thread.join(timeout=2.0)
+
+        # Flush batch writers to ensure all data is saved
+        self.logger.info("Flushing batch writers...")
+        for writer_type, writer in self.db_writers.items():
+            try:
+                if hasattr(writer, 'flush'):
+                    writer.flush()
+                    self.logger.info(f"Flushed {writer_type} batch writer")
+            except Exception as e:
+                self.logger.error(f"Failed to flush {writer_type} writer: {e}")
 
         # Unsubscribe from events
         if self.event_subscriber:
