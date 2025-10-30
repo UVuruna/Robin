@@ -131,4 +131,4 @@ data/json/model_mapping.json
 
 # instructions for claude
 instructionPNG/
-query.txt
+QUERY.txt

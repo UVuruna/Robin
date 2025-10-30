@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional, Dict, Any
 
-from data_layer.models.base import BaseModel
+from data.models.base import BaseModel
 
 
 @dataclass

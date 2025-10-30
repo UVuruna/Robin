@@ -21,12 +21,13 @@
 aviator/                                 [PROJECT ROOT]
 │
 ├── 🎮 GLAVNI FAJLOVI
-│   ├── main.py                         ✅ [POPULATED] - GUI Control Panel
+│   ├── main.py                         ✅ [UPDATED] - Added Settings tab & on_settings_changed
 │   ├── README.md                       ✅ [POPULATED] - Readme file for GitHub
-│   ├── STRUCTURE.md                    ✅ [POPULATED] - Project file organization
+│   ├── STRUCTURE.md                    ✅ [UPDATED 10-30] - Current project structure
 │   ├── ARCHITECTURE.md                 ✅ [POPULATED] - Architecture documentation
-│   ├── CHANGELOG.md                    ✅ [POPULATED] - Version history
+│   ├── CHANGELOG.md                    ✅ [UPDATED 10-30] - Added v4.3.0 entry
 │   ├── CLAUDE.md                       ✅ [POPULATED] - AI instructions & workflow
+│   ├── JOURNAL_OPUS.md                 ✅ [NEW] - Development log for current session
 │   └── requirements.txt                ✅ [EXISTS] - Dependencies
 │
 ├── 📁 core/                            [JEZGRO SISTEMA]
@@ -46,9 +47,10 @@ aviator/                                 [PROJECT ROOT]
 │   │
 │   └── communication/
 │       ├── event_bus.py                ✅ [POPULATED] - Event bus V2
-│       └── shared_state.py            ✅ [COMPLETED] - Multiprocessing-safe shared memory
+│       ├── shared_state.py            ✅ [COMPLETED] - Multiprocessing-safe shared memory
+│       └── stats_queue.py             ✅ [MOVED HERE] - Real-time worker→GUI communication
 │
-├── 📁 data_layer/                      [DATA LAYER]
+├── 📁 data/                            [DATA ACCESS LAYER - renamed from data_layer]
 │   ├── models/
 │   │   ├── base.py                    ✅ [COMPLETED] - Base model class
 │   │   ├── round.py                   ✅ [COMPLETED] - Round model with validation
@@ -59,12 +61,15 @@ aviator/                                 [PROJECT ROOT]
 │   │   ├── batch_writer.py            ✅ [POPULATED] - Batch pisanje (50x brže)
 │   │   └── query_builder.py           ✅ [COMPLETED] - SQL INSERT query builder
 │   │
+│   ├── readers/                        [NEW FOLDER]
+│   │   └── centralized_stats_reader.py ✅ [MOVED HERE] - Centralized DB reader with caching
+│   │
 │   └── cache/
 │       └── redis_cache.py             📄 [TODO] - Redis keširanje
 │
 ├── 📁 collectors/                      [KOLEKTORI PODATAKA]
 │   ├── base_collector.py              ✅ [COMPLETED] - Bazna klasa sa statistics tracking
-│   ├── main_collector.py              ✅ [REFACTORED] - Glavni kolektor (extends BaseCollector)
+│   ├── main_collector.py              ✅ [UPDATED] - Added save_region_screenshot() for all regions
 │   ├── rgb_collector.py               ✅ [REFACTORED] - RGB kolektor (extends BaseCollector)
 │   └── phase_collector.py             ✅ [COMPLETED] - Game phase transition collector
 │
@@ -75,7 +80,7 @@ aviator/                                 [PROJECT ROOT]
 │
 ├── 📁 orchestration/                   [ORKESTRACIJA]
 │   ├── process_manager.py             ✅ [POPULATED] - Upravljanje procesima
-│   ├── bookmaker_worker.py            ✅ [COMPLETED] - Worker po kladionici (refactored)
+│   ├── bookmaker_worker.py            ✅ [UPDATED v3.0] - Added image_saving_config support
 │   ├── coordinator.py                 ✅ [COMPLETED] - Multi-worker synchronization
 │   ├── health_monitor.py              ✅ [COMPLETED] - Process health monitoring
 │   └── shared_reader.py               ✅ [POPULATED] - Shared OCR reader V2
@@ -86,23 +91,23 @@ aviator/                                 [PROJECT ROOT]
 │   ├── fibonacci.py                   📄 [EXISTS] - Fibonacci strategija (TODO)
 │   └── custom_strategy.py             📄 [EXISTS] - Custom strategije (TODO)
 │
-├── 📁 gui/                             [GUI KOMPONENTE]
-│   ├── __init__.py                    ✅ [POPULATED] - Package init
-│   ├── app_controller.py              📄 [EXISTS] - App kontroler
-│   ├── config_manager.py              📄 [EXISTS] - Config manager
+├── 📁 gui/                             [GUI KOMPONENTE - Cleaned up]
+│   ├── __init__.py                    ✅ [UPDATED] - Package init
+│   ├── app_controller.py              ✅ [UPDATED v3.0] - App kontroler with image_saving support
+│   ├── config_manager.py              📄 [EXISTS] - Config manager (stays here - GUI-specific)
 │   ├── setup_dialog.py                📄 [EXISTS] - Setup dialog
-│   ├── stats_widgets.py               📄 [EXISTS] - Statistike
-│   ├── tools_tab.py                   📄 [EXISTS] - Tools tab
-│   ├── log_reader.py                  📄 [EXISTS] - Log čitanje
-│   └── stats_queue.py                 📄 [EXISTS] - Stats queue
+│   ├── stats_widgets.py               📄 [EXISTS] - Statistics widgets
+│   ├── tools_tab.py                   ✅ [REFACTORED v8.0] - Tools only (no settings)
+│   └── settings_tab.py                ✅ [NEW v1.0] - Settings tab with OCR & image saving
 │
 ├── 📁 config/                          [KONFIGURACIJA]
-│   ├── settings.py                    ✅ [POPULATED] - Glavna podešavanja
+│   ├── settings.py                    ✅ [UPDATED v6.0] - Auto-loads OCR from last_setup.json
 │   └── regions.json                   📄 [EXISTS] - Region definicije
 │
-├── 📁 utils/                           [UTILITIES]
+├── 📁 utils/                           [UTILITIES - Expanded]
 │   ├── __init__.py                    ❌ [EMPTY] - Package init
 │   ├── logger.py                      ✅ [POPULATED] - Logging sistem
+│   ├── log_reader.py                  ✅ [MOVED HERE] - Log file reader thread
 │   ├── diagnostic.py                  📄 [EXISTS] - Dijagnostika
 │   ├── quick_test.py                  📄 [EXISTS] - Brzi testovi
 │   ├── region_editor.py               📄 [EXISTS] - Region editor
@@ -116,23 +121,19 @@ aviator/                                 [PROJECT ROOT]
 │   ├── ocr_accuracy.py                📄 [EXISTS] - OCR accuracy
 │   └── ocr_performance.py             📄 [EXISTS] - OCR performance
 │
-└── 📁 data/                            [DATA FOLDER]
-    ├── database/                       📁 [EMPTY FOLDER]
-    ├── history/                        
+└── 📁 storage/                         [FILE STORAGE - renamed from data]
+    ├── databases/                      📁 [SQLite database files]
+    ├── history/
     │   ├── aviator_architecture.md    📄 [EXISTS] - Stara arhitektura
     │   └── migration_guide.md         📄 [EXISTS] - Migration guide
-    ├── json/                           
-    │   ├── bookmaker_config.json      📄 [EXISTS]
-    │   ├── config.json                 📄 [EXISTS]
-    │   ├── model_mapping.json         📄 [EXISTS]
-    │   ├── screen_regions.json        📄 [EXISTS]
-    │   └── video_regions.json         📄 [EXISTS]
-    ├── ocr_templates/                  
+    ├── knowledge/                      📁 [Knowledge base files]
+    ├── models/                         📁 [ML model files (.pkl, .h5)]
+    ├── ocr_templates/
     │   ├── money/                      📁 [EMPTY FOLDER]
-    │   └── score/                      
+    │   └── score/
     │       ├── 0-9.png                 📄 [EXISTS] - Digit templates
     │       └── data.psd                📄 [EXISTS] - Photoshop file
-    └── screenshots/                     📁 [EMPTY FOLDER]
+    └── screenshots/                     📁 [Screenshot storage for CNN training]
 ```
 
 ## B. 📝 IMPLEMENTACIONI STATUS

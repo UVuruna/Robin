@@ -43,7 +43,7 @@ from core.ocr.engine import OCREngine
 from config.settings import OCR
 from core.communication.event_bus import EventPublisher, EventSubscriber, EventType, Event
 from core.communication.shared_state import get_shared_state, BookmakerState, GamePhase
-from data_layer.database.batch_writer import BatchDatabaseWriter, BatchConfig
+from data.database.batch_writer import BatchDatabaseWriter, BatchConfig
 
 
 class GameState(Enum):
@@ -113,7 +113,8 @@ class BookmakerWorker:
                  coords: Dict[str, Dict],
                  db_writers: Dict[str, BatchDatabaseWriter],
                  shutdown_event: MPEvent,
-                 health_queue: Queue):
+                 health_queue: Queue,
+                 image_saving_config: Optional[Dict[str, bool]] = None):
         """
         Initialize Worker.
 
@@ -125,6 +126,8 @@ class BookmakerWorker:
                        {'main': main_writer, 'betting': betting_writer, 'rgb': rgb_writer}
             shutdown_event: Multiprocessing Event for shutdown
             health_queue: Queue for health signals
+            image_saving_config: Dict with regions to save for CNN training
+                                 {'score': True, 'my_money': False, 'player_count': True}
         """
         self.bookmaker_name = bookmaker_name
         self.bookmaker_index = bookmaker_index
@@ -132,6 +135,7 @@ class BookmakerWorker:
         self.db_writers = db_writers  # SHARED writers per TYPE!
         self.shutdown_event = shutdown_event
         self.health_queue = health_queue
+        self.image_saving_config = image_saving_config or {'score': True}  # Default: only score
 
         # ===== LOCAL STATE (FAST!) =====
         self.local_state: Dict[str, Any] = {
@@ -243,7 +247,8 @@ class BookmakerWorker:
             bookmaker=self.bookmaker_name,
             shared_state=self.shared_game_state,
             db_writer=self.db_writers['main'],
-            event_publisher=self.event_publisher
+            event_publisher=self.event_publisher,
+            image_saving_config=self.image_saving_config
         )
         self.collectors.append(main_collector)
 
@@ -684,6 +689,14 @@ class BookmakerWorker:
                         self.local_state['player_count_current'] = player_count[0]
                         self.local_state['player_count_total'] = player_count[1]
 
+                        # Save screenshot if enabled
+                        if self.collectors:
+                            for collector in self.collectors:
+                                if hasattr(collector, 'save_region_screenshot'):
+                                    value = f"{player_count[0]}_{player_count[1]}"
+                                    collector.save_region_screenshot('player_count', value, image)
+                                    break
+
             # Read total money
             if "other_money_region" in self.coords:
                 image = self.screen_capture.capture_region(self.coords["other_money_region"])
@@ -692,6 +705,13 @@ class BookmakerWorker:
 
                     if money_value is not None:
                         self.local_state['money_total'] = money_value
+
+                        # Save screenshot if enabled
+                        if self.collectors:
+                            for collector in self.collectors:
+                                if hasattr(collector, 'save_region_screenshot'):
+                                    collector.save_region_screenshot('player_money', str(money_value), image)
+                                    break
 
         except Exception as e:
             self.logger.error(f"Error reading ended data: {e}")
@@ -895,6 +915,9 @@ def worker_entry_point(
         format=f'%(asctime)s | {bookmaker_name:12s} | %(levelname)-8s | %(message)s'
     )
 
+    # Extract optional config from kwargs
+    image_saving_config = kwargs.get('image_saving_config', None)
+
     # Create and run worker
     worker = BookmakerWorker(
         bookmaker_name=bookmaker_name,
@@ -902,7 +925,8 @@ def worker_entry_point(
         coords=coords,
         db_writers=db_writers,
         shutdown_event=shutdown_event,
-        health_queue=health_queue
+        health_queue=health_queue,
+        image_saving_config=image_saving_config
     )
 
     worker.run()

@@ -20,7 +20,7 @@ import numpy as np
 from collectors.base_collector import BaseCollector
 from core.communication.shared_state import SharedGameState, GamePhase
 from core.communication.event_bus import EventPublisher, EventType
-from data_layer.database.batch_writer import BatchDatabaseWriter
+from data.database.batch_writer import BatchDatabaseWriter
 from config.settings import PATH
 
 
@@ -44,7 +44,8 @@ class MainDataCollector(BaseCollector):
         bookmaker: str,
         shared_state: SharedGameState,
         db_writer: BatchDatabaseWriter,
-        event_publisher: Optional[EventPublisher] = None
+        event_publisher: Optional[EventPublisher] = None,
+        image_saving_config: Optional[Dict[str, bool]] = None
     ):
         """
         Initialize main data collector.
@@ -54,6 +55,7 @@ class MainDataCollector(BaseCollector):
             shared_state: SharedGameState instance
             db_writer: BatchDatabaseWriter instance
             event_publisher: Optional EventPublisher
+            image_saving_config: Dict with regions to save (e.g., {'score': True, 'my_money': False})
         """
         super().__init__(bookmaker, shared_state, db_writer, event_publisher)
 
@@ -70,7 +72,10 @@ class MainDataCollector(BaseCollector):
         # Screenshot capturing for CNN training
         self.screenshot_dir = PATH.screenshots_dir
         self.screenshot_dir.mkdir(parents=True, exist_ok=True)
-        self.screenshot_enabled = True  # Can be toggled if needed
+
+        # Image saving configuration
+        self.image_saving_config = image_saving_config or {'score': True}  # Default: only score
+        self.screenshot_enabled = any(self.image_saving_config.values())  # Enable if any region is selected
 
         # Statistics
         self.rounds_collected = 0
@@ -383,7 +388,8 @@ class MainDataCollector(BaseCollector):
         Returns:
             True if saved successfully
         """
-        if not self.screenshot_enabled or image is None:
+        # Check if score saving is enabled in config
+        if not self.image_saving_config.get('score', False) or image is None:
             return False
 
         try:
@@ -399,6 +405,37 @@ class MainDataCollector(BaseCollector):
             self.logger.error(f"Failed to save screenshot: {e}")
             return False
 
+    def save_region_screenshot(self, region_name: str, value: str, image: np.ndarray) -> bool:
+        """
+        Save screenshot for any region for CNN training data.
+
+        Args:
+            region_name: Name of region (e.g., 'my_money', 'player_count')
+            value: OCR read value as string
+            image: Region image (np.ndarray from screen capture)
+
+        Returns:
+            True if saved successfully
+        """
+        # Check if this region saving is enabled in config
+        if not self.image_saving_config.get(region_name, False) or image is None:
+            return False
+
+        try:
+            timestamp = int(time.time())
+            # Clean value for filename (remove special characters)
+            clean_value = value.replace('/', '_').replace('.', '_').replace(',', '')
+            filename = f"{region_name}_{clean_value}_{timestamp}.png"
+            filepath = self.screenshot_dir / filename
+
+            cv2.imwrite(str(filepath), image)
+            self.logger.debug(f"Saved {region_name} screenshot: {filename}")
+            return True
+
+        except Exception as e:
+            self.logger.error(f"Failed to save {region_name} screenshot: {e}")
+            return False
+
 
 if __name__ == "__main__":
     # Testing
@@ -409,7 +446,7 @@ if __name__ == "__main__":
     )
 
     from core.communication.shared_state import get_shared_state
-    from data_layer.database.batch_writer import BatchConfig
+    from data.database.batch_writer import BatchConfig
 
     print("=== Main Collector Test ===\n")
 

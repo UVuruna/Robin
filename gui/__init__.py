@@ -9,8 +9,7 @@ from gui.stats_widgets import (
     SessionKeeperStats
 )
 from gui.tools_tab import ToolsTab
-from gui.log_reader import LogReaderThread
-from gui.stats_queue import StatsCollector
+from gui.settings_tab import SettingsTab
 
 __all__ = [
     'AppController',
@@ -21,6 +20,5 @@ __all__ = [
     'BettingAgentStats',
     'SessionKeeperStats',
     'ToolsTab',
-    'LogReaderThread',
-    'StatsCollector'
+    'SettingsTab'
 ]

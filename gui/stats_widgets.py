@@ -55,9 +55,13 @@ class DataCollectorStats(QWidget):
 
         self.init_ui()
 
+        # Load database query frequency from settings
+        from config.settings import COLLECT
+        query_freq_ms = COLLECT.database_query_frequency * 1000  # Convert to milliseconds
+
         self.update_timer = QTimer()
         self.update_timer.timeout.connect(self.fetch_and_update_stats)
-        self.update_timer.start(2000)  # 2s update
+        self.update_timer.start(query_freq_ms)  # Use configured frequency
 
     def init_ui(self):
         """Initialize UI sa TOTAL gore + GRID dole layout."""
@@ -330,7 +334,11 @@ class BettingAgentStats(QWidget):
 
         self.update_timer = QTimer()
         self.update_timer.timeout.connect(self.fetch_and_update_stats)
-        self.update_timer.start(3000)
+        # Load database query frequency from settings
+        from config.settings import COLLECT
+        query_freq_ms = COLLECT.database_query_frequency * 1000  # Convert to milliseconds
+
+        self.update_timer.start(query_freq_ms)  # Use configured frequency
 
     def init_ui(self):
         """Initialize UI."""
@@ -583,7 +591,11 @@ class RGBCollectorStats(QWidget):
 
         self.update_timer = QTimer()
         self.update_timer.timeout.connect(self.fetch_and_update_stats)
-        self.update_timer.start(3000)
+        # Load database query frequency from settings
+        from config.settings import COLLECT
+        query_freq_ms = COLLECT.database_query_frequency * 1000  # Convert to milliseconds
+
+        self.update_timer.start(query_freq_ms)  # Use configured frequency
 
     def init_ui(self):
         """Initialize UI."""

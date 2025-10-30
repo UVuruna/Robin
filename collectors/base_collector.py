@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 
 from core.communication.shared_state import SharedGameState, BookmakerState
 from core.communication.event_bus import EventPublisher, EventType
-from data_layer.database.batch_writer import BatchDatabaseWriter
+from data.database.batch_writer import BatchDatabaseWriter
 
 
 @dataclass
@@ -303,7 +303,7 @@ if __name__ == "__main__":
     )
 
     from core.communication.shared_state import get_shared_state
-    from data_layer.database.batch_writer import BatchConfig
+    from data.database.batch_writer import BatchConfig
 
     # Example concrete collector for testing
     class TestCollector(BaseCollector):

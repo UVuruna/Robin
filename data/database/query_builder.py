@@ -158,7 +158,7 @@ class QueryBuilder:
             Tuple of (query_string, parameters)
 
         Example:
-            >>> from data_layer.models.round import Round
+            >>> from data.models.round import Round
             >>> builder = QueryBuilder()
             >>> round_data = Round(bookmaker="Mozzart", final_score=3.45)
             >>> query, params = builder.build_insert_from_model("rounds", round_data)
@@ -185,7 +185,7 @@ class QueryBuilder:
             Tuple of (query_string, list_of_parameters)
 
         Example:
-            >>> from data_layer.models.round import Round
+            >>> from data.models.round import Round
             >>> builder = QueryBuilder()
             >>> rounds = [
             ...     Round(bookmaker="Mozzart", final_score=3.45),

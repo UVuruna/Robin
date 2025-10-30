@@ -5,9 +5,154 @@
 **All notable changes to the AVIATOR project**
 
 [![Semantic Versioning](https://img.shields.io/badge/Semantic%20Versioning-2.0.0-blue)]()
-[![Last Update](https://img.shields.io/badge/Last%20Update-2025--10--29-green)]()
+[![Last Update](https://img.shields.io/badge/Last%20Update-2024--10--30-green)]()
 
 </div>
+
+---
+
+## [4.4.0] - 2024-10-30 - 🏗️ Major Refactoring: Folder Structure Reorganization (Opus)
+
+### 🔄 **Folder Structure Changes**
+
+**Major Reorganization**
+- 📁 `data/` → `storage/` - Actual file storage (databases, screenshots, models)
+- 📁 `data_layer/` → `data/` - Data access layer (database operations, models)
+- ✅ Better semantic naming - clearer purpose for each folder
+
+**File Relocations**
+- `gui/log_reader.py` → `utils/log_reader.py` - It's a utility, not GUI
+- `gui/stats_queue.py` → `core/communication/stats_queue.py` - Communication infrastructure
+- `gui/centralized_stats_reader.py` → `data/readers/centralized_stats_reader.py` - Database reader
+- `gui/config_manager.py` → **KEPT IN GUI** (tightly coupled with GUI dialogs)
+
+### 📝 **Configuration Updates**
+
+**config/settings.py PathConfig**
+- `data_dir` → `storage_dir` - Updated all path references
+- Updated `ensure_directories()` method
+- Fixed CNN model paths to use `storage/models/`
+
+### 🔧 **Import Updates**
+- All `from data_layer` → `from data` (automated with sed)
+- Updated gui/__init__.py exports
+- Verified 0 remaining data_layer references
+
+### 📊 **Architecture Statistics**
+- GUI: 6 files (down from 8 - moved 2 files)
+- Core: 11 files (up from 10 - added stats_queue)
+- Data: 10 files (includes new readers/ folder)
+- Utils: 7 files (up from 6 - added log_reader)
+- Storage: New top-level folder for actual file storage
+
+### 📚 **Documentation Updates**
+- ARCHITECTURE.md: Updated complete module tree with new structure
+- STRUCTURE.md: Reflected all folder/file changes
+- Both show clear separation of concerns
+
+---
+
+## [4.3.1] - 2024-10-30 - 🐛 Critical Bug Fixes & System Audit (Opus)
+
+### 🔴 **Critical Bugs Fixed**
+
+**GamePhase Enum Values**
+- ❌ Values didn't match documented phase order (would cause incorrect detection)
+- ✅ Fixed: ENDED: 2→0, LOADING: 5→1, BETTING: 0→2
+- ✅ Fixed: SCORE_LOW: 1→3, SCORE_MID: 3→4, SCORE_HIGH: 4→5
+- ✅ Added missing UNKNOWN = -1
+
+**GUI Initialization**
+- ❌ tools_tab.py AttributeError on startup
+- ✅ Fixed initialization order: load_current_settings() before init_ui()
+
+### 📊 **System Audit Results**
+
+**File Connectivity Analysis**
+- Total Python files: 67
+- Connected to main.py: 66 (98.5%)
+- Orphaned: 1 (data_layer/cache/redis_cache.py - future Redis placeholder)
+- No circular dependencies detected
+
+**Verification Testing**
+- ✅ All core imports working
+- ✅ GamePhase enum values correct
+- ✅ Configuration files exist
+- ✅ Directory structure verified
+- ✅ GUI startup successful
+
+### 📚 **Documentation Updates**
+
+**ARCHITECTURE.md**
+- Added comprehensive Module Connection Tree
+- Complete import chain mapping
+- Connection statistics (98.5% connected)
+
+**JOURNAL.md**
+- Reorganized with model attribution (Sonnet vs Opus)
+- Added summary table with dates/tasks/models
+- Consolidated all sessions
+
+**Files Updated**
+- config/settings.py (v7.0)
+- gui/tools_tab.py (v8.1)
+
+---
+
+## [4.3.0] - 2024-10-30 - ⚙️ Settings Tab & Image Saving Implementation (Opus)
+
+### 🎨 **GUI Enhancements**
+
+**New SETTINGS Tab**
+- ✅ Created `gui/settings_tab.py` - dedicated settings configuration
+- ✅ Moved bookmaker configuration from Tools tab to Settings tab
+- ✅ Added OCR method selection (TESSERACT/TEMPLATE/CNN)
+- ✅ Added image saving checkboxes for all regions
+
+**Refactored TOOLS Tab**
+- ✅ Removed settings functionality (moved to Settings tab)
+- ✅ Now contains only utility and testing tools
+- ✅ Displays current configuration loaded from last_setup.json
+
+### 📸 **Image Saving for CNN Training**
+
+**Implementation**
+- ✅ Added `save_region_screenshot()` to MainDataCollector
+- ✅ Configurable per-region saving (score, my_money, player_count, etc.)
+- ✅ Image naming: `{region_name}_{value}_{timestamp}.png`
+- ✅ Zero overhead when disabled
+
+**Configuration Flow**
+1. User selects regions in Settings tab
+2. Saves to `config/user/last_setup.json`
+3. Passes through app_controller to workers
+4. Workers pass to collectors for conditional saving
+
+### 🔧 **System Improvements**
+
+**config/settings.py**
+- ✅ OCRConfig now auto-loads method from last_setup.json
+- ✅ Dynamic OCR method selection on startup
+
+**gui/app_controller.py**
+- ✅ Added current_config storage
+- ✅ Passes image_saving_config to workers via kwargs
+
+**orchestration/bookmaker_worker.py**
+- ✅ Added image_saving_config parameter
+- ✅ Passes config to MainDataCollector
+- ✅ Saves screenshots during OCR operations
+
+### ✅ **System Verification**
+
+**All Components Tested:**
+- All modules import successfully
+- Tesseract OCR v5.5.0 configured
+- Directory structure verified
+- Config files present
+- BatchDatabaseWriter functional
+
+**Status:** READY FOR PRODUCTION
 
 ---
 

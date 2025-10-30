@@ -21,7 +21,7 @@ from collectors.base_collector import BaseCollector
 from core.capture.screen_capture import ScreenCapture
 from core.communication.shared_state import SharedGameState
 from core.communication.event_bus import EventPublisher, EventType
-from data_layer.database.batch_writer import BatchDatabaseWriter
+from data.database.batch_writer import BatchDatabaseWriter
 
 
 class RGBCollector(BaseCollector):
@@ -241,7 +241,7 @@ if __name__ == "__main__":
     )
 
     from core.communication.shared_state import get_shared_state
-    from data_layer.database.batch_writer import BatchConfig
+    from data.database.batch_writer import BatchConfig
 
     print("=== RGB Collector Test ===\n")
 

@@ -35,6 +35,7 @@ from gui.stats_widgets import (
 )
 from core.communication.event_bus import EventSubscriber, EventType
 from gui.tools_tab import ToolsTab
+from gui.settings_tab import SettingsTab
 from utils.logger import AviatorLogger
 from core.capture.region_manager import RegionManager
 
@@ -124,22 +125,41 @@ class AviatorControlPanel(QMainWindow):
         # Session Keeper tab
         self.tabs.addTab(self.create_app_tab("session_keeper"), "⏰ Session Keeper")
 
+        # Settings tab
+        self.settings_tab = SettingsTab(self.config)
+        self.tabs.addTab(self.settings_tab, "⚙️ Settings")
+
+        # Connect settings changed signal
+        self.settings_tab.settings_changed.connect(self.on_settings_changed)
+
         # Tools tab
         self.tools_tab = ToolsTab(self.config)
         self.tabs.addTab(self.tools_tab, "🛠️ Tools")
 
         main_layout.addWidget(self.tabs)
 
+    def on_settings_changed(self, settings):
+        """Handle settings changes from Settings tab."""
+        # Update config with new settings
+        self.config['ocr_method'] = settings.get('ocr_method', 'TESSERACT')
+        self.config['image_saving'] = settings.get('image_saving', {})
+
+        # Reload Tools tab to reflect new settings
+        if hasattr(self, 'tools_tab'):
+            self.tools_tab.load_current_settings()
+
+        self.logger.info(f"Settings updated: OCR={settings.get('ocr_method')}")
+
     def _on_round_end_event(self, event):
         """Handle round end events from workers"""
         bookmaker = event.data.get('bookmaker')
         score = event.data.get('final_score')
-        
+
         # Update stats widget if it exists
         if hasattr(self, 'data_stats'):
             # Trigger stats refresh
             self.data_stats.fetch_and_update_stats()
-        
+
         # Add to appropriate log
         log_msg = f"[{bookmaker}] Round ended: {score:.2f}x"
         if hasattr(self, 'data_log'):

@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from collectors.base_collector import BaseCollector
 from core.communication.shared_state import SharedGameState, GamePhase
 from core.communication.event_bus import EventPublisher, EventType
-from data_layer.database.batch_writer import BatchDatabaseWriter
+from data.database.batch_writer import BatchDatabaseWriter
 
 
 @dataclass
@@ -344,7 +344,7 @@ if __name__ == "__main__":
     )
 
     from core.communication.shared_state import get_shared_state
-    from data_layer.database.batch_writer import BatchConfig
+    from data.database.batch_writer import BatchConfig
 
     print("=== Phase Collector Test ===\n")
 

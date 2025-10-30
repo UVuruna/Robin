@@ -1,71 +1,59 @@
 # gui/tools_tab.py
-# VERSION: 7.0 - Refactored to use RegionManager (v4.0 architecture)
+# VERSION: 8.1 - Fixed initialization order bug
+# CHANGES: load_current_settings() now called before init_ui() to prevent AttributeError
 
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QGroupBox,
-    QPushButton, QLabel, QComboBox, QMessageBox, QInputDialog,
+    QWidget, QVBoxLayout, QHBoxLayout, QGroupBox,
+    QPushButton, QLabel, QMessageBox,
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
-from typing import Dict, List
+from typing import Dict
 import json
-from config.settings import PATH, AVAILABLE_GRIDS
+from config.settings import PATH
 from core.capture.region_manager import RegionManager
 
 class ToolsTab(QWidget):
-    """Tools tab - ULTRA COMPACT version with collapsible sections."""
+    """Tools tab - Utils and testing tools only."""
 
     def __init__(self, config: Dict = None):
         super().__init__()
         self.config = config or {}
         self.region_manager = RegionManager()
-        self.bookmaker_checkboxes = {}
-        self.bookmaker_grid = None
-        self.bookmaker_grid_widget = None
-        self.all_bookmakers = []
 
-        self._load_bookmakers()
+        # For tools that need current settings
+        self.layout_combo = None
+        self.position_combo = None
+        self.monitor_combo = None
+
+        self.load_current_settings()
         self.init_ui()
-        self.load_last_config()
 
-    def _load_bookmakers(self):
-        """Load all bookmakers from config."""
+    def load_current_settings(self):
+        """Load current settings from last_setup.json for tools to use."""
         try:
-            with open(PATH.bookmakers, "r") as f:
-                data = json.load(f)
-            bookmakers_set = set()
-            for group in data.get("server_groups", []):
-                bookmakers_set.update(group.get("bookmakers", []))
-            self.all_bookmakers = sorted(list(bookmakers_set))
+            if not PATH.last_setup.exists():
+                return
+
+            with open(PATH.last_setup, "r") as f:
+                config = json.load(f)
+
+            # Store settings for tools to use
+            last = config.get("tools_last", {})
+            if last:
+                self.current_layout = last.get("layout", "GRID 2×3")
+                self.current_position = last.get("position", "Top-Left")
+                self.current_monitor = last.get("target_monitor", "primary")
+            else:
+                # Defaults
+                self.current_layout = "GRID 2×3"
+                self.current_position = "Top-Left"
+                self.current_monitor = "primary"
         except:
-            self.all_bookmakers = []
-
-    def _populate_monitor_dropdown(self):
-        """Populate monitor dropdown with detected monitors."""
-        monitors = self.region_manager.get_monitor_setup()
-
-        if len(monitors) == 1:
-            # Single monitor
-            monitor = list(monitors.values())[0]
-            label = f"Primary - {monitor.width}x{monitor.height}"
-            self.monitor_combo.addItem(label, userData="primary")
-        else:
-            # Multiple monitors - format as requested
-            sorted_monitors = sorted(monitors.items(), key=lambda x: monitors[x[0]].x if x[0] in monitors else 0)
-
-            for i, (key, monitor) in enumerate(sorted_monitors):
-                if i == 0:
-                    # First monitor (leftmost)
-                    label = f"Monitor {monitor.index} (Left) - {monitor.width}x{monitor.height}"
-                    self.monitor_combo.addItem(label, userData="left")
-                elif i == len(sorted_monitors) - 1:
-                    # Last monitor (rightmost)
-                    label = f"Monitor {monitor.index} (Right) - {monitor.width}x{monitor.height}"
-                    self.monitor_combo.addItem(label, userData="right")
-                else:
-                    # Middle monitors
-                    label = f"Monitor {monitor.index} (Center {i}) - {monitor.width}x{monitor.height}"
-                    self.monitor_combo.addItem(label, userData=f"center_{i}")
+            # Defaults on error
+            self.current_layout = "GRID 2×3"
+            self.current_position = "Top-Left"
+            self.current_monitor = "primary"
 
     def init_ui(self):
         layout = QVBoxLayout(self)
@@ -80,8 +68,23 @@ class ToolsTab(QWidget):
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
 
-        # Settings (COMPACT)
-        layout.addWidget(self.create_compact_settings())
+        # Info about current settings
+        info_group = QGroupBox("📍 Current Configuration")
+        info_layout = QVBoxLayout(info_group)
+
+        info_text = QLabel(
+            f"Layout: {self.current_layout}\n"
+            f"Position: {self.current_position}\n"
+            f"Monitor: {self.current_monitor}"
+        )
+        info_text.setStyleSheet("color: #42A5F5; font-weight: bold;")
+        info_layout.addWidget(info_text)
+
+        note = QLabel("(Configure in Settings tab)")
+        note.setStyleSheet("color: gray; font-size: 9pt; font-style: italic;")
+        info_layout.addWidget(note)
+
+        layout.addWidget(info_group)
 
         # Tools sections
         layout.addWidget(self.create_region_tools())
@@ -90,313 +93,12 @@ class ToolsTab(QWidget):
 
         layout.addStretch()
 
-    def create_compact_settings(self) -> QGroupBox:
-        """ULTRA COMPACT settings section."""
-        group = QGroupBox("⚙️ Settings")
-        layout = QVBoxLayout(group)
-        layout.setSpacing(5)
-
-        # Row 1: Layout + Position + Dual + Preset selector
-        row1 = QHBoxLayout()
-        row1.addWidget(QLabel("Layout:"))
-        self.layout_combo = QComboBox()
-        self.layout_combo.addItems(AVAILABLE_GRIDS)
-        self.layout_combo.currentTextChanged.connect(self.on_layout_changed)
-        row1.addWidget(self.layout_combo, 1)
-
-        row1.addWidget(QLabel("Pos:"))
-        self.position_combo = QComboBox()
-        row1.addWidget(self.position_combo, 1)
-
-        row1.addWidget(QLabel("Monitor:"))
-        self.monitor_combo = QComboBox()
-        self._populate_monitor_dropdown()
-        row1.addWidget(self.monitor_combo, 1)
-
-        row1.addWidget(QLabel("Preset:"))
-        self.preset_combo = QComboBox()
-        self.preset_combo.addItem("(select)")
-        self.preset_combo.currentTextChanged.connect(self.load_preset)
-        row1.addWidget(self.preset_combo, 1)
-
-        layout.addLayout(row1)
-
-        # Row 2: Bookmaker grid (INLINE - no groupbox)
-        self.bookmaker_grid_widget = QWidget()
-        self.bookmaker_grid = QGridLayout(self.bookmaker_grid_widget)
-        self.bookmaker_grid.setSpacing(5)
-        self.bookmaker_grid.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self.bookmaker_grid_widget)
-
-        # Row 3: Action buttons (small)
-        row3 = QHBoxLayout()
-        save_btn = QPushButton("💾 Save Preset")
-        save_btn.setMaximumWidth(120)
-        save_btn.clicked.connect(self.save_preset)
-        row3.addWidget(save_btn)
-
-        row3.addStretch()
-        layout.addLayout(row3)
-
-        # Initialize
-        if self.layout_combo.count() > 0:
-            self.on_layout_changed(self.layout_combo.currentText())
-
-        return group
-
-    def on_layout_changed(self, layout: str):
-        if not layout:
-            return
-
-        # Update positions based on layout
-        self.position_combo.clear()
-        positions = self._get_positions_for_layout(layout)
-        if positions:
-            self.position_combo.addItems(positions)
-
-        # Update grid
-        if self.bookmaker_grid is not None:
-            self.update_bookmaker_grid()
-
-        # Update presets
-        self.update_preset_combo()
-
-    def _get_positions_for_layout(self, layout: str) -> List[str]:
-        """Get position names for a given layout."""
-        try:
-            positions = self.region_manager.generate_position_names(layout)
-            # Add "ALL" option for visualizer
-            position_list = list(positions.keys())
-            position_list.append("ALL")
-            return position_list
-        except ValueError:
-            return []
-
-    def update_bookmaker_grid(self):
-        if self.bookmaker_grid is None:
-            return
-
-        while self.bookmaker_grid.count():
-            item = self.bookmaker_grid.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-
-        self.bookmaker_checkboxes.clear()
-
-        layout_name = self.layout_combo.currentText()
-        if not layout_name:
-            return
-
-        try:
-            _, cols = self.region_manager.parse_grid_format(layout_name)
-        except ValueError:
-            return
-
-        # Get positions (without "ALL")
-        all_positions = self._get_positions_for_layout(layout_name)
-        positions = [p for p in all_positions if p != "ALL"]
-
-        for i, pos_label in enumerate(positions):
-            row = i // cols
-            col = i % cols
-
-            # Create horizontal layout for label + combo
-            container = QWidget()
-            container_layout = QHBoxLayout(container)
-            container_layout.setContentsMargins(2, 2, 2, 2)
-            container_layout.setSpacing(5)
-
-            # Position label
-            label = QLabel(f"{pos_label}:")
-            label.setStyleSheet("color: #42A5F5; font-weight: bold; font-size: 10pt;")
-            label.setMinimumWidth(30)
-            label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            container_layout.addWidget(label)
-
-            # Bookmaker combo
-            combo = QComboBox()
-            combo.setMinimumHeight(28)
-            combo.addItem("")
-            combo.addItems(self.all_bookmakers)
-            container_layout.addWidget(combo, 1)
-
-            self.bookmaker_grid.addWidget(container, row, col)
-            self.bookmaker_checkboxes[pos_label] = combo
-
-    def update_preset_combo(self):
-        """Update preset dropdown for current layout."""
-        layout = self.layout_combo.currentText()
-        if not layout:
-            return
-
-        self.preset_combo.blockSignals(True)
-        self.preset_combo.clear()
-        self.preset_combo.addItem("(select)")
-
-        try:
-            with open(PATH.bookmaker_presets, "r") as f:
-                config = json.load(f)
-            
-            presets = config.get(layout, {})
-            for preset_name in presets.keys():
-                self.preset_combo.addItem(preset_name)
-
-        except:
-            pass
-
-        self.preset_combo.blockSignals(False)
-
-    def load_preset(self, preset_name: str):
-        """Load bookmaker preset."""
-        if preset_name == "(select)" or not preset_name:
-            return
-
-        layout = self.layout_combo.currentText()
-        if not layout:
-            return
-
-        try:
-            with open(PATH.bookmaker_presets, "r") as f:
-                config = json.load(f)
-
-            preset = config.get(layout, {}).get(preset_name)
-            if preset:
-                for pos, bookmaker in preset.items():
-                    if pos in self.bookmaker_checkboxes:
-                        combo = self.bookmaker_checkboxes[pos]
-                        index = combo.findText(bookmaker)
-                        if index >= 0:
-                            combo.setCurrentIndex(index)
-
-        except Exception as e:
-            QMessageBox.warning(self, "Error", f"Failed to load preset:\n{e}")
-
-    def save_preset(self):
-        """Save bookmaker configuration as named preset."""
-        layout = self.layout_combo.currentText()
-        if not layout:
-            QMessageBox.warning(self, "Error", "Select layout first")
-            return
-
-        bookmakers = self.get_selected_bookmakers()
-        if not bookmakers:
-            QMessageBox.warning(self, "Error", "No bookmakers selected")
-            return
-
-        preset_name, ok = QInputDialog.getText(
-            self, "Save Preset", "Enter preset name:"
-        )
-
-        if not ok or not preset_name:
-            return
-
-        try:
-            # Load presets
-            if PATH.bookmaker_presets.exists():
-                with open(PATH.bookmaker_presets, "r") as f:
-                    presets = json.load(f)
-            else:
-                presets = {}
-
-            # Create layout structure if needed
-            if layout not in presets:
-                presets[layout] = {}
-
-            # Save preset
-            presets[layout][preset_name] = bookmakers
-
-            # Write presets
-            with open(PATH.bookmaker_presets, "w") as f:
-                json.dump(presets, f, indent=2)
-
-            # Save tools_last to last_setup.json
-            if PATH.last_setup.exists():
-                with open(PATH.last_setup, "r") as f:
-                    last_setup = json.load(f)
-            else:
-                last_setup = {}
-
-            last_setup["tools_last"] = {
-                "layout": layout,
-                "position": self.position_combo.currentText(),
-                "target_monitor": self.monitor_combo.currentData(),
-                "preset": preset_name,
-            }
-
-            with open(PATH.last_setup, "w") as f:
-                json.dump(last_setup, f, indent=2)
-
-            QMessageBox.information(self, "Success", f"Preset '{preset_name}' saved!")
-            self.update_preset_combo()
-
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to save:\n{e}")
-
-    def load_last_config(self):
-        """Load last used config."""
-        try:
-            # Load from last_setup.json, not bookmaker_presets.json
-            if not PATH.last_setup.exists():
-                return
-
-            with open(PATH.last_setup, "r") as f:
-                config = json.load(f)
-
-            last = config.get("tools_last", {})
-            if not last:
-                return
-
-            # Layout
-            if "layout" in last:
-                idx = self.layout_combo.findText(last["layout"])
-                if idx >= 0:
-                    self.layout_combo.setCurrentIndex(idx)
-
-            # Position
-            if "position" in last:
-                idx = self.position_combo.findText(last["position"])
-                if idx >= 0:
-                    self.position_combo.setCurrentIndex(idx)
-
-            # Monitor (with backward compatibility)
-            if "target_monitor" in last:
-                target = last["target_monitor"]
-                # Find dropdown item by userData
-                for i in range(self.monitor_combo.count()):
-                    if self.monitor_combo.itemData(i) == target:
-                        self.monitor_combo.setCurrentIndex(i)
-                        break
-            elif "dual_monitor" in last:
-                # Backward compatibility: dual_monitor=True → "right", False → "primary"
-                target = "right" if last["dual_monitor"] else "primary"
-                for i in range(self.monitor_combo.count()):
-                    if self.monitor_combo.itemData(i) == target:
-                        self.monitor_combo.setCurrentIndex(i)
-                        break
-
-            # Preset
-            if "preset" in last:
-                idx = self.preset_combo.findText(last["preset"])
-                if idx >= 0:
-                    self.preset_combo.setCurrentIndex(idx)
-
-        except:
-            pass
-
-    def get_selected_bookmakers(self) -> Dict[str, str]:
-        bookmakers = {}
-        for pos, combo in self.bookmaker_checkboxes.items():
-            bookmaker = combo.currentText().strip()
-            if bookmaker:
-                bookmakers[pos] = bookmaker
-        return bookmakers
-
     def get_current_settings(self) -> tuple:
-        """Get current settings (layout, position, target_monitor)."""
+        """Get current settings from loaded configuration."""
         return (
-            self.layout_combo.currentText(),
-            self.position_combo.currentText(),
-            self.monitor_combo.currentData(),  # Returns userData (e.g., "right", "left", "primary")
+            self.current_layout,
+            self.current_position,
+            self.current_monitor,
         )
 
     def create_region_tools(self) -> QGroupBox:
@@ -566,49 +268,49 @@ class ToolsTab(QWidget):
             QMessageBox.critical(self, "Error", str(e))
 
     def run_ocr_test(self):
-        layout, position, dual = self.get_current_settings()
+        layout, position, target_monitor = self.get_current_settings()
         if not layout or not position:
-            QMessageBox.warning(self, "Error", "Select layout and position")
+            QMessageBox.warning(self, "Error", "Configure settings first")
             return
         try:
             from tests.ocr_accuracy import OCRTestDialog
-            dialog = OCRTestDialog(layout, position, dual, self)
+            dialog = OCRTestDialog(layout, position, target_monitor, self)
             dialog.exec()
         except Exception as e:
             QMessageBox.critical(self, "Error", str(e))
 
     def run_speed_benchmark(self):
-        layout, position, dual = self.get_current_settings()
+        layout, position, target_monitor = self.get_current_settings()
         if not layout or not position:
-            QMessageBox.warning(self, "Error", "Select layout and position")
+            QMessageBox.warning(self, "Error", "Configure settings first")
             return
         try:
             from tests.ocr_performance import SpeedBenchmarkDialog
-            dialog = SpeedBenchmarkDialog(layout, position, dual, self)
+            dialog = SpeedBenchmarkDialog(layout, position, target_monitor, self)
             dialog.exec()
         except Exception as e:
             QMessageBox.critical(self, "Error", str(e))
 
     def run_ml_accuracy(self):
-        layout, position, dual = self.get_current_settings()
+        layout, position, target_monitor = self.get_current_settings()
         if not layout or not position:
-            QMessageBox.warning(self, "Error", "Select layout and position")
+            QMessageBox.warning(self, "Error", "Configure settings first")
             return
         try:
             from tests.ml_phase_accuracy import MLPhaseTestDialog
-            dialog = MLPhaseTestDialog(layout, position, dual, self)
+            dialog = MLPhaseTestDialog(layout, position, target_monitor, self)
             dialog.exec()
         except Exception as e:
             QMessageBox.critical(self, "Error", str(e))
 
     def run_ml_speed(self):
-        layout, position, dual = self.get_current_settings()
+        layout, position, target_monitor = self.get_current_settings()
         if not layout or not position:
-            QMessageBox.warning(self, "Error", "Select layout and position")
+            QMessageBox.warning(self, "Error", "Configure settings first")
             return
         try:
             from tests.ml_phase_performance import MLPhaseSpeedDialog
-            dialog = MLPhaseSpeedDialog(layout, position, dual, self)
+            dialog = MLPhaseSpeedDialog(layout, position, target_monitor, self)
             dialog.exec()
         except Exception as e:
             QMessageBox.critical(self, "Error", str(e))

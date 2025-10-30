@@ -1,6 +1,6 @@
 # config/settings.py
-# VERSION: 6.0 - FIXED: Added START phase
-# CHANGES: Added GamePhase.START = 6 for complete phase cycle
+# VERSION: 7.0 - FIXED: Corrected GamePhase enum values and added UNKNOWN
+# CHANGES: Fixed all GamePhase values to match documented order, added UNKNOWN = -1
 
 from dataclasses import dataclass
 from enum import IntEnum
@@ -36,14 +36,16 @@ class GamePhase(IntEnum):
     - LOADING and START are very short (<1 sec) and may be missed
     - SCORE phases (LOW/MID/HIGH) are optional depending on how high the score goes
     - Game can end at 1.00x (goes directly from BETTING to ENDED)
+    - UNKNOWN is a special state for initialization
     """
 
-    ENDED = 2  # Game crashed/ended
-    LOADING = 5  # Loading between rounds
-    BETTING = 0  # Betting window open
-    SCORE_LOW = 1  # Score 1.00x - 9.99x
-    SCORE_MID = 3  # Score 10.00x - 99.99x
-    SCORE_HIGH = 4  # Score 100.00x +
+    UNKNOWN = -1  # Unknown/uninitialized state
+    ENDED = 0  # Game crashed/ended
+    LOADING = 1  # Loading between rounds
+    BETTING = 2  # Betting window open
+    SCORE_LOW = 3  # Score 1.00x - 9.99x
+    SCORE_MID = 4  # Score 10.00x - 99.99x
+    SCORE_HIGH = 5  # Score 100.00x +
     START = 6  # Game just started (<200ms, often missed)
 
 
@@ -72,17 +74,17 @@ class PathConfig:
     # Root directories
     project_root: Path = PROJECT_ROOT
     config_dir: Path = PROJECT_ROOT / "config"
-    data_dir: Path = PROJECT_ROOT / "data"
+    storage_dir: Path = PROJECT_ROOT / "storage"  # Renamed from data_dir
     logs_dir: Path = PROJECT_ROOT / "logs"
 
     # Config subdirectories
     config_static_dir: Path = config_dir / "static"
     config_user_dir: Path = config_dir / "user"
 
-    # Data subdirectories
-    database_dir: Path = data_dir / "databases"
-    models_dir: Path = data_dir / "models"
-    screenshots_dir: Path = data_dir / "screenshots"
+    # Storage subdirectories (formerly data subdirectories)
+    database_dir: Path = storage_dir / "databases"
+    models_dir: Path = storage_dir / "models"
+    screenshots_dir: Path = storage_dir / "screenshots"
 
     # Static config files (version-controlled)
     screen_regions: Path = config_static_dir / "screen_regions.json"
@@ -110,7 +112,7 @@ class PathConfig:
             self.config_dir,
             self.config_static_dir,
             self.config_user_dir,
-            self.data_dir,
+            self.storage_dir,  # Updated from data_dir
             self.logs_dir,
             self.database_dir,
             self.models_dir,
@@ -125,8 +127,26 @@ class PathConfig:
 class OCRConfig:
     """OCR configuration for all OCR methods."""
 
-    # OCR Method selection
+    # OCR Method selection - loaded from last_setup.json if exists
     method: OCRMethod = OCRMethod.TESSERACT
+
+    def __post_init__(self):
+        """Load OCR method from last_setup.json if available."""
+        try:
+            import json
+            last_setup_path = PATH.last_setup
+            if last_setup_path.exists():
+                with open(last_setup_path, 'r') as f:
+                    config = json.load(f)
+                    method_str = config.get('ocr_method', 'TESSERACT')
+                    if method_str == 'TESSERACT':
+                        self.method = OCRMethod.TESSERACT
+                    elif method_str == 'TEMPLATE':
+                        self.method = OCRMethod.TEMPLATE
+                    elif method_str == 'CNN':
+                        self.method = OCRMethod.CNN
+        except:
+            pass  # Keep default if load fails
 
     # Tesseract executable path (auto-detected if not specified)
     tesseract_cmd: str = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
@@ -145,9 +165,9 @@ class OCRConfig:
     template_threshold: float = 0.99  # 99%+ accuracy required
     template_method: int = 5  # cv2.TM_CCOEFF_NORMED
 
-    # CNN model paths (loaded from data/models)
-    cnn_score_model: Path = PROJECT_ROOT / "data" / "models" / "score_cnn.h5"
-    cnn_money_model: Path = PROJECT_ROOT / "data" / "models" / "money_cnn.h5"
+    # CNN model paths (loaded from storage/models)
+    cnn_score_model: Path = PROJECT_ROOT / "storage" / "models" / "score_cnn.h5"
+    cnn_money_model: Path = PROJECT_ROOT / "storage" / "models" / "money_cnn.h5"
 
 
 @dataclass
@@ -161,6 +181,11 @@ class CollectionConfig:
     phase_check_interval: float = 0.1  # seconds
     score_read_interval: float = 0.2  # seconds
 
+    # Database query frequency for GUI stats widgets (seconds)
+    # This controls how often stats widgets query the database
+    # Default: 30 seconds (was 1-3 seconds which was overkill)
+    database_query_frequency: int = 30
+
     # Batch sizes for database
     batch_size_rounds: int = 50
     batch_size_thresholds: int = 50
@@ -169,6 +194,19 @@ class CollectionConfig:
     def __post_init__(self):
         if self.score_thresholds is None:
             self.score_thresholds = [1.5, 2.0, 2.5, 3.0, 4.0, 5.0]
+
+        # Load database query frequency from last_setup.json if available
+        try:
+            import json
+            last_setup_path = PATH.last_setup
+            if last_setup_path.exists():
+                with open(last_setup_path, 'r') as f:
+                    config = json.load(f)
+                    freq = config.get('database_query_frequency')
+                    if freq and isinstance(freq, int) and 5 <= freq <= 300:
+                        self.database_query_frequency = freq
+        except:
+            pass  # Keep default if load fails
 
 
 @dataclass

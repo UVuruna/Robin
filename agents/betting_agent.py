@@ -10,7 +10,7 @@ from enum import IntEnum
 
 from core.input.transaction_controller import TransactionController
 from core.communication.event_bus import EventPublisher, EventSubscriber, EventType
-from data_layer.database.batch_writer import BatchDatabaseWriter
+from data.database.batch_writer import BatchDatabaseWriter
 from config import GamePhase, BettingConfig
 from strategies.base_strategy import BaseStrategy
 from agents.strategy_executor import StrategyExecutor

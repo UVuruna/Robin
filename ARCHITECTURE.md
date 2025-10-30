@@ -744,6 +744,223 @@ stateDiagram-v2
 
 ---
 
+## 🔗 Module Connection Tree
+
+### Complete Import Chain from main.py
+
+This tree shows how all modules are connected through imports, starting from the main entry point:
+
+```python
+main.py (Entry Point)
+│
+├── gui/ (6 files total, all connected)
+│   ├── config_manager.py
+│   │   └── imports: config.settings.PATH
+│   │
+│   ├── app_controller.py ⭐ (Critical Hub)
+│   │   ├── imports: config.settings.PATH
+│   │   ├── imports: orchestration.process_manager.ProcessManager
+│   │   ├── imports: orchestration.bookmaker_worker.worker_entry_point
+│   │   ├── imports: core.communication.event_bus.EventBus
+│   │   └── imports: data.database.batch_writer.BatchDatabaseWriter
+│   │
+│   ├── setup_dialog.py
+│   │   ├── imports: core.capture.region_manager.RegionManager
+│   │   └── imports: config.settings
+│   │
+│   ├── stats_widgets.py
+│   │   ├── imports: config.settings
+│   │   └── imports: utils.logger
+│   │
+│   ├── tools_tab.py
+│   │   ├── imports: core.capture.region_manager.RegionManager
+│   │   ├── imports: config.settings.PATH
+│   │   └── calls: utils.region_editor, utils.region_visualizer, utils.diagnostic
+│   │
+│   └── settings_tab.py
+│       ├── imports: core.capture.region_manager.RegionManager
+│       └── imports: config.settings
+│
+├── orchestration/ (4 files total, all connected)
+│   ├── process_manager.py
+│   │   └── imports: multiprocessing, threading, queue
+│   │
+│   ├── bookmaker_worker.py ⭐⭐ (Most Critical File)
+│   │   ├── imports: config.settings (PATH, GamePhase, OCR)
+│   │   ├── imports: core.ocr.engine.OCREngine
+│   │   ├── imports: core.capture.screen_capture.ScreenCapture
+│   │   ├── imports: core.communication.shared_state.SharedGameState
+│   │   ├── imports: core.communication.event_bus.EventPublisher
+│   │   ├── imports: collectors.main_collector.MainDataCollector
+│   │   ├── imports: collectors.rgb_collector.RGBCollector
+│   │   ├── imports: collectors.phase_collector.PhaseCollector
+│   │   ├── imports: agents.betting_agent.BettingAgent
+│   │   ├── imports: agents.session_keeper.SessionKeeper
+│   │   └── imports: agents.strategy_executor.StrategyExecutor
+│   │
+│   ├── health_monitor.py (via orchestration.__init__)
+│   └── coordinator.py (via orchestration.__init__)
+│
+├── core/ (11 active files)
+│   ├── communication/
+│   │   ├── event_bus.py
+│   │   ├── shared_state.py
+│   │   │   └── imports: config.settings.GamePhase
+│   │   └── stats_queue.py  # Real-time worker→GUI communication
+│   │       └── Queue system for live stats updates
+│   │
+│   ├── capture/
+│   │   ├── region_manager.py
+│   │   │   └── imports: config.settings
+│   │   └── screen_capture.py
+│   │
+│   ├── ocr/
+│   │   ├── engine.py
+│   │   │   ├── imports: config.settings.OCRMethod, OCR
+│   │   │   ├── imports: core.ocr.tesseract_ocr.TesseractOCR
+│   │   │   ├── imports: core.ocr.template_ocr.TemplateOCR
+│   │   │   └── imports: core.ocr.cnn_ocr.CNNOCRReader
+│   │   ├── tesseract_ocr.py
+│   │   ├── template_ocr.py
+│   │   └── cnn_ocr.py
+│   │
+│   └── input/
+│       ├── transaction_controller.py
+│       └── action_queue.py
+│
+├── data/ (9 active files, 1 orphaned)  # Renamed from data_layer
+│   ├── database/
+│   │   ├── batch_writer.py
+│   │   │   └── imports: data.database.query_builder
+│   │   ├── connection.py (via data.__init__)
+│   │   └── query_builder.py (via data.__init__)
+│   │
+│   ├── models/
+│   │   ├── base.py
+│   │   ├── round.py
+│   │   │   └── imports: data.models.base
+│   │   └── threshold.py
+│   │       └── imports: data.models.base
+│   │
+│   ├── readers/  # NEW - Database readers
+│   │   └── centralized_stats_reader.py
+│   │       └── Centralized database reader with caching
+│   │
+│   └── cache/
+│       └── redis_cache.py ❌ (ORPHANED - placeholder for future)
+│
+├── collectors/ (4 files total, all connected via bookmaker_worker)
+│   ├── base_collector.py
+│   │   ├── imports: core.communication.shared_state
+│   │   └── imports: core.communication.event_bus
+│   │
+│   ├── main_collector.py
+│   │   └── imports: collectors.base_collector.BaseCollector
+│   │
+│   ├── rgb_collector.py
+│   │   ├── imports: collectors.base_collector.BaseCollector
+│   │   └── imports: core.capture.screen_capture
+│   │
+│   └── phase_collector.py
+│       └── imports: collectors.base_collector.BaseCollector
+│
+├── agents/ (3 files total, all connected via bookmaker_worker)
+│   ├── betting_agent.py
+│   │   ├── imports: agents.strategy_executor.StrategyExecutor
+│   │   ├── imports: strategies.base_strategy
+│   │   └── imports: core.input.transaction_controller
+│   │
+│   ├── session_keeper.py
+│   │   └── imports: core.input.transaction_controller
+│   │
+│   └── strategy_executor.py
+│
+├── strategies/ (2 active files)
+│   ├── base_strategy.py
+│   └── martingale.py
+│       └── imports: strategies.base_strategy
+│
+├── utils/ (6 active files, all connected)
+│   ├── logger.py (imported by main.py)
+│   ├── log_reader.py  # Log file reader thread
+│   ├── region_editor.py (called from tools_tab)
+│   ├── region_visualizer.py (called from tools_tab)
+│   ├── diagnostic.py (called from tools_tab)
+│   ├── quick_test.py (called from tools_tab)
+│   └── template_generator.py (standalone tool)
+│
+├── tests/ (4 files, connected via imports)
+│   ├── ocr_performance.py
+│   │   └── imports: core.ocr.engine, config.settings
+│   ├── ocr_accuracy.py
+│   │   └── imports: core.ocr.engine, config.settings
+│   ├── ml_phase_performance.py
+│   │   └── imports: core.capture.screen_capture, config.settings
+│   └── ml_phase_accuracy.py
+│       └── imports: core.capture.screen_capture, config.settings
+│
+├── storage/ (6 subdirectories)  # Renamed from data - actual file storage
+│   ├── databases/  # SQLite database files
+│   ├── models/     # ML model files (.pkl, .h5)
+│   ├── screenshots/  # Saved screenshots for training
+│   ├── ocr_templates/  # Template matching images
+│   ├── knowledge/  # Knowledge base files
+│   └── history/    # Historical documentation
+│
+└── config/
+    └── settings.py (imported by almost everything)
+        └── defines: PATH, OCR, COLLECT, BETTING, GamePhase, BetState, OCRMethod
+```
+
+### Critical Connection Points
+
+1. **main.py** → **app_controller.py** → **bookmaker_worker.py**
+   - This is the primary execution chain
+   - app_controller spawns worker processes
+   - Each worker contains ALL collectors and agents
+
+2. **bookmaker_worker.py** - The Hub
+   - Imports from 6 different modules
+   - Creates instances of all collectors and agents
+   - Coordinates all real-time operations
+
+3. **config.settings** - Universal Configuration
+   - Imported by 25+ files
+   - Central configuration for entire system
+   - PATH constants used everywhere
+
+4. **batch_writer.py** - Shared Resource
+   - Created in app_controller
+   - Shared among all workers
+   - Critical for database operations
+
+### Orphaned Files (Not Connected)
+
+- **data/cache/redis_cache.py** - Placeholder for future Redis implementation
+
+### Connection Statistics
+
+| Category | Connected | Orphaned | Total |
+|----------|-----------|----------|-------|
+| GUI | 6 | 0 | 6 |
+| Core | 11 | 0 | 11 |
+| Orchestration | 4 | 0 | 4 |
+| Data | 9 | 1 | 10 |
+| Collectors | 4 | 0 | 4 |
+| Agents | 3 | 0 | 3 |
+| Strategies | 2 | 0 | 2 |
+| Utils | 7 | 0 | 7 |
+| Tests | 4 | 0 | 4 |
+| Config | 1 | 0 | 1 |
+| Storage | N/A | N/A | N/A |
+| **TOTAL** | **51** | **1** | **52** |
+| **Package __init__ files** | 16 | 0 | 16 |
+| **GRAND TOTAL** | **67** | **1** | **68** |
+
+**Connection Rate: 98.5%** (67 of 68 files connected)
+
+---
+
 ## 🔮 Future Architecture Plans
 
 ### Phase 1 - Current (Completed ✅)

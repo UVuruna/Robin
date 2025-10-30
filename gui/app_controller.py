@@ -23,7 +23,7 @@ from config.settings import PATH
 from orchestration.process_manager import ProcessManager, WorkerConfig
 from orchestration.bookmaker_worker import worker_entry_point
 from core.communication.event_bus import EventBus, EventSubscriber, EventType, Event
-from data_layer.database.batch_writer import BatchDatabaseWriter, BatchConfig
+from data.database.batch_writer import BatchDatabaseWriter, BatchConfig
 
 
 class AppController:
@@ -46,6 +46,9 @@ class AppController:
         # Event handling
         self.event_bus = EventBus()
         self.event_subscriber = EventSubscriber("AppController")
+
+        # Current configuration storage
+        self.current_config = {}
 
         # ===== SHARED BATCH WRITERS (per TYPE!) =====
         self.db_writers = {}  # {type_name: BatchWriter}
@@ -144,6 +147,9 @@ class AppController:
             self.logger.warning(f"{app_name} already running")
             return False
 
+        # Store current configuration for workers
+        self.current_config = config
+
         # Store log callback
         if log_callback:
             self.log_callbacks[app_name] = log_callback
@@ -213,7 +219,9 @@ class AppController:
                 ),
                 kwargs={
                     # Add app-specific kwargs if needed
-                    'app_type': app_name
+                    'app_type': app_name,
+                    # Pass image saving configuration from settings
+                    'image_saving_config': self.current_config.get('image_saving', {'score': True})
                 },
                 auto_restart=True,
                 max_restarts=3,
