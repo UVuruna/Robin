@@ -21,7 +21,6 @@ import numpy as np
 import pickle
 from typing import Dict
 
-from config.settings import PATH
 from core.capture.screen_capture import ScreenCapture
 
 class MLPhaseSpeedWorker(QThread):

@@ -7,7 +7,6 @@ import numpy as np
 import logging
 from pathlib import Path
 from typing import Optional, Dict
-import pickle
 
 # LAZY IMPORT: TensorFlow/Keras loaded ONLY when CNN models are actually used
 TENSORFLOW_AVAILABLE = None  # None = not checked yet, True/False after check

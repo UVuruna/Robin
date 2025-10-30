@@ -8,7 +8,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
-    QCheckBox,
     QSpinBox,
     QComboBox,
     QGroupBox,
@@ -19,7 +18,6 @@ from PySide6.QtWidgets import (
 )
 from typing import Dict, List
 import json
-from pathlib import Path
 from core.capture.region_manager import RegionManager
 from config.settings import PATH as CONFIG_PATH
 

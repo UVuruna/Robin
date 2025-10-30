@@ -12,8 +12,8 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import QTimer, Signal
 import sqlite3
-from datetime import datetime, timedelta
-from typing import Dict, Optional, List
+from datetime import datetime
+from typing import Optional, List
 from config.settings import PATH
 from utils.logger import AviatorLogger
 

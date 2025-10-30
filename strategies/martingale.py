@@ -12,10 +12,10 @@ Martingale strategy:
 """
 
 import logging
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any
 from datetime import datetime
 
-from strategies.base_strategy import BaseStrategy, BetDecision
+from strategies.base_strategy import BaseStrategy
 
 
 class MartingaleStrategy(BaseStrategy):

@@ -16,7 +16,6 @@ from typing import Dict, Optional, Any, Set, List
 from datetime import datetime
 import cv2
 import numpy as np
-from pathlib import Path
 
 from collectors.base_collector import BaseCollector
 from core.communication.shared_state import SharedGameState, GamePhase

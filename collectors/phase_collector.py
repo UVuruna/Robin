@@ -14,10 +14,10 @@ import logging
 import time
 from typing import Dict, Optional, Any, List
 from datetime import datetime
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from collectors.base_collector import BaseCollector
-from core.communication.shared_state import SharedGameState, BookmakerState, GamePhase
+from core.communication.shared_state import SharedGameState, GamePhase
 from core.communication.event_bus import EventPublisher, EventType
 from data_layer.database.batch_writer import BatchDatabaseWriter
 

@@ -18,7 +18,6 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 import mss
 import platform
-from config.settings import AVAILABLE_GRIDS
 
 # Import win32api only on Windows
 if platform.system() == "Windows":

@@ -40,7 +40,7 @@ from pathlib import Path
 # Core components
 from core.capture.screen_capture import ScreenCapture
 from core.ocr.engine import OCREngine
-from config.settings import OCR, OCRMethod
+from config.settings import OCR
 from core.communication.event_bus import EventPublisher, EventSubscriber, EventType, Event
 from core.communication.shared_state import get_shared_state, BookmakerState, GamePhase
 from data_layer.database.batch_writer import BatchDatabaseWriter, BatchConfig
@@ -237,7 +237,6 @@ class BookmakerWorker:
         from collectors.main_collector import MainDataCollector
         from collectors.rgb_collector import RGBCollector
         from collectors.phase_collector import PhaseCollector
-        import threading
 
         # Main Data Collector
         main_collector = MainDataCollector(

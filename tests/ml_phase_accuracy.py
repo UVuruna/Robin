@@ -20,7 +20,6 @@ import time
 import numpy as np
 import pickle
 
-from config.settings import PATH
 from core.capture.screen_capture import ScreenCapture
 
 class MLPhaseTestWorker(QThread):
